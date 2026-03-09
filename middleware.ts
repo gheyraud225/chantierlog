@@ -40,11 +40,18 @@ export async function middleware(request: NextRequest) {
 
   // Protection de la route /admin — vérifier platform_admins
   if (user && path.startsWith("/admin")) {
-    const { data: adminData } = await supabase
+    const { data: adminData, error: adminError } = await supabase
       .from("platform_admins")
       .select("user_id")
       .eq("user_id", user.id)
       .single();
+
+    // Si erreur DB (ex: table inexistante), laisser passer et laisser la page
+    // gérer l'accès — évite une boucle de redirection silencieuse
+    if (adminError && adminError.code !== "PGRST116") {
+      console.error("[middleware] platform_admins error:", adminError.message);
+      return response;
+    }
 
     if (!adminData) {
       return NextResponse.redirect(new URL("/", request.url));

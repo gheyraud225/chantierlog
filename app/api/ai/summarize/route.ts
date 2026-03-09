@@ -48,9 +48,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const response = await client.messages.create({
-      model: "claude-3-5-sonnet-20240620",
+      model: "claude-sonnet-4-0",
       max_tokens: 1024,
-      //thinking: { type: "adaptive" },
       system: mode === "text"
         ? `Tu es un assistant spécialisé dans la gestion de chantiers BTP.
 Tu améliores et structures des notes de chantier écrites en français.

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
 const FEATURES = [
@@ -321,6 +322,18 @@ export default function LoginPage() {
                   </button>
                 </p>
               )}
+
+              <p className="text-center text-xs text-gray-700 leading-relaxed">
+                En continuant, vous acceptez la{" "}
+                <Link href="/confidentialite" className="text-gray-500 hover:text-gray-300 underline underline-offset-2 transition-colors">
+                  Politique de Confidentialité
+                </Link>{" "}
+                et les{" "}
+                <Link href="/cgu" className="text-gray-500 hover:text-gray-300 underline underline-offset-2 transition-colors">
+                  CGU
+                </Link>
+                .
+              </p>
             </>
           )}
         </div>

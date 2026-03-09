@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Outfit } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import Link from "next/link";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -25,6 +26,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="fr" className={outfit.variable}>
       <body className={`${outfit.variable} antialiased`}>
         {children}
+        <footer className="border-t border-white/[0.04] mt-auto py-5 px-4">
+          <div className="flex flex-col items-center gap-2 text-center">
+            <p className="text-xs text-gray-700">
+              © {new Date().getFullYear()} ChantierLog — Projet Étudiant (NE) 🇨🇭
+            </p>
+            <div className="flex items-center gap-4 text-xs text-gray-700">
+              <Link href="/confidentialite" className="hover:text-gray-500 transition-colors">
+                Confidentialité
+              </Link>
+              <span className="text-gray-800">·</span>
+              <Link href="/cgu" className="hover:text-gray-500 transition-colors">
+                CGU
+              </Link>
+            </div>
+          </div>
+        </footer>
         <Analytics />
         <SpeedInsights />
       </body>

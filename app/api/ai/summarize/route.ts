@@ -51,17 +51,25 @@ export async function POST(req: NextRequest) {
       max_tokens: 512,
       thinking: { type: "adaptive" },
       system: `Tu es un assistant spécialisé dans la gestion de chantiers BTP.
-Tu résumes des notes vocales de chantier en français.
-Ton résumé doit être concis (2-4 phrases max), professionnel, et mettre en évidence :
-- Les points d'avancement clés
-- Les problèmes ou blocages mentionnés
-- Les actions à faire ou matériaux à prévoir
-- Toute information importante pour le suivi du chantier
-N'invente aucune information. Reste factuel et direct.`,
+Tu résumes des notes vocales de chantier en français, en Markdown structuré.
+
+Format de sortie — utilise uniquement les sections pertinentes parmi :
+- **Avancement :** [ce qui a été réalisé]
+- **Problèmes :** [blocages, retards, incidents]
+- **Actions :** [tâches à faire, matériaux à commander]
+- **Matériaux :** [matériaux mentionnés avec quantités]
+- **Informations :** [autres informations utiles au suivi]
+
+Règles strictes :
+- Maximum 4 points, chaque point sur sa propre ligne commençant par "- "
+- Les labels (Avancement, Problèmes, etc.) toujours en gras avec **
+- Texte après le label en clair, sans gras
+- Phrases courtes et factuelles
+- N'invente aucune information`,
       messages: [
         {
           role: "user",
-          content: `Voici la transcription d'une note vocale de chantier. Fais-en un résumé structuré :\n\n"${transcript}"`,
+          content: `Transcription de la note vocale :\n\n"${transcript}"`,
         },
       ],
     });

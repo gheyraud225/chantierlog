@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const response = await client.messages.create({
-      model: "claude-haiku-4-5",
+      model: "claude-sonnet-4-0",
       max_tokens: 512,
       thinking: { type: "adaptive" },
       system: mode === "text"

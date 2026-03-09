@@ -781,22 +781,9 @@ export default function ProjectPage() {
                 {/* Note vocale du log */}
                 {log.voiceNoteTranscript && (
                   <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-gray-500 flex items-center gap-1.5">
-                        <span>🎙</span> Note vocale
-                      </p>
-                      {canUseAI && !log.voiceNoteSummary && (
-                        <button
-                          onClick={() => handleSummarize(log)}
-                          disabled={summarizingLogId === log.id}
-                          className="text-xs text-orange-400 hover:text-orange-300 disabled:opacity-50 flex items-center gap-1"
-                        >
-                          {summarizingLogId === log.id ? (
-                            <span className="w-3 h-3 border border-orange-400 border-t-transparent rounded-full animate-spin" />
-                          ) : "✨"} Résumé IA
-                        </button>
-                      )}
-                    </div>
+                    <p className="text-xs text-gray-500 flex items-center gap-1.5">
+                      <span>🎙</span> Transcription vocale
+                    </p>
                     <p className="text-xs text-gray-400 leading-relaxed">{log.voiceNoteTranscript}</p>
                     {log.voiceNoteUrl && (
                       <audio controls src={log.voiceNoteUrl} className="w-full h-8 opacity-60" />

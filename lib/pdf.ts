@@ -265,40 +265,52 @@ function drawLog(
 
   y += 10;
 
-  // Contenu texte
+  // Contenu texte (résumé note)
   doc.setFontSize(10.5);
   doc.setFont("helvetica", "normal");
   setTextC(doc, DARK);
   const lines = doc.splitTextToSize(log.content, CW) as string[];
   lines.forEach((line) => {
     y = needsPage(doc, y, 7, accent);
+    // Lignes vides → espacement réduit pour la lisibilité des paragraphes
+    if (line.trim() === "") { y += 2; return; }
     doc.text(line, ML, y);
-    y += 6;
+    y += 6.5;
   });
 
   y += 4;
 
-  // Note vocale (transcript brut)
+  // Note vocale (transcript brut) — barre latérale colorée
   if (log.voiceNoteTranscript) {
-    y = needsPage(doc, y, 14, accent);
-    setFill(doc, [240, 240, 240]);
-    const transcriptLines = doc.splitTextToSize(log.voiceNoteTranscript, CW - 6) as string[];
-    const boxH = transcriptLines.length * 5 + 10;
-    doc.roundedRect(ML, y, CW, boxH, 2, 2, "F");
-    doc.setFontSize(7.5);
+    const transcriptLines = doc.splitTextToSize(log.voiceNoteTranscript, CW - 10) as string[];
+    const blockH = transcriptLines.length * 5.2 + 12;
+    y = needsPage(doc, y, blockH + 4, accent);
+
+    // Fond très léger
+    setFill(doc, [252, 250, 246]);
+    doc.roundedRect(ML, y, CW, blockH, 2, 2, "F");
+
+    // Barre latérale accent
+    setFill(doc, accent);
+    doc.rect(ML, y, 2.5, blockH, "F");
+
+    // Label
+    doc.setFontSize(7);
     doc.setFont("helvetica", "bold");
-    setTextC(doc, GRAY2);
-    doc.text("Note vocale transcrite :", ML + 3, y + 5);
+    setTextC(doc, accent);
+    doc.text("TRANSCRIPTION VOCALE", ML + 6, y + 5.5);
+
+    // Texte transcript
+    doc.setFontSize(9);
     doc.setFont("helvetica", "italic");
     setTextC(doc, GRAY1);
-    doc.setFontSize(9);
-    let ty = y + 10;
+    let ty = y + 11;
     transcriptLines.forEach((line) => {
       ty = needsPage(doc, ty, 6, accent);
-      doc.text(line, ML + 3, ty);
-      ty += 5;
+      doc.text(line, ML + 6, ty);
+      ty += 5.2;
     });
-    y = ty + 3;
+    y = ty + 5;
   }
 
   // Champs custom

@@ -2,8 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Project, ProjectStatus, OrganizationMember, NewProject } from "@/lib/types";
-import { getProjects, addProject, deleteProject, getCurrentMember } from "@/lib/storage";
+import { Project, ProjectStatus, OrganizationMember, NewProject, SubscriptionPlan, Organization } from "@/lib/types";
+import {
+  getProjects, addProject, deleteProject, getCurrentMember,
+  isPlatformAdmin, getOrgSubscriptionPlan, getOrganization,
+} from "@/lib/storage";
 import { supabase } from "@/lib/supabase";
 import ConfirmDialog from "@/components/ConfirmDialog";
 
@@ -19,14 +22,24 @@ const STATUS_COLORS: Record<ProjectStatus, { dot: string; badge: string; border:
   done:    { dot: "bg-gray-500",    badge: "text-gray-400 bg-gray-400/10",       border: "border-l-gray-600"    },
 };
 
+const PLAN_LABELS: Record<string, string> = {
+  free: "Gratuit", starter: "Starter", pro: "Pro", enterprise: "Entreprise",
+};
+
 const NAV_ITEMS = [
-  { label: "Profil",        path: "/profile",       role: null },
-  { label: "Équipe",        path: "/team",          role: "owner" },
-  { label: "Champs",        path: "/fields",        role: "owner" },
-  { label: "Statistiques",  path: "/stats",         role: "owner" },
-  { label: "PDF",           path: "/pdf-settings",  role: "owner" },
-  { label: "Mes stats", path: "/my-stats", role: null },
+  { label: "Profil",          path: "/profile",      role: null,    adminOnly: false },
+  { label: "Équipe",          path: "/team",         role: "owner", adminOnly: false },
+  { label: "Champs",          path: "/fields",       role: "owner", adminOnly: false },
+  { label: "Statistiques",    path: "/stats",        role: "owner", adminOnly: false },
+  { label: "PDF",             path: "/pdf-settings", role: "owner", adminOnly: false },
+  { label: "Mes stats",       path: "/my-stats",     role: null,    adminOnly: false },
+  { label: "Abonnement",      path: "/subscription", role: "owner", adminOnly: false },
+  { label: "Administration",  path: "/admin",        role: null,    adminOnly: true  },
 ];
+
+const ROLE_LABELS: Record<string, string> = {
+  owner: "Patron", manager: "Chef de chantier", worker: "Ouvrier",
+};
 
 export default function Home() {
   const router = useRouter();
@@ -39,11 +52,23 @@ export default function Home() {
   const [currentMember, setCurrentMember] = useState<OrganizationMember | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [showNav, setShowNav] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [plan, setPlan] = useState<SubscriptionPlan | null>(null);
+  const [org, setOrg] = useState<Organization | null>(null);
 
   useEffect(() => {
-    Promise.all([getProjects(), getCurrentMember()]).then(([data, me]) => {
+    Promise.all([
+      getProjects(),
+      getCurrentMember(),
+      isPlatformAdmin(),
+      getOrgSubscriptionPlan(),
+      getOrganization(),
+    ]).then(([data, me, admin, planData, orgData]) => {
       setProjects(data);
       setCurrentMember(me);
+      setIsAdmin(admin);
+      setPlan(planData);
+      setOrg(orgData);
       setLoading(false);
     });
   }, []);
@@ -78,9 +103,23 @@ export default function Home() {
     done: projects.filter(p => p.status === "done").length,
   };
 
-  const ROLE_LABELS: Record<string, string> = {
-    owner: "Patron", manager: "Chef de chantier", worker: "Ouvrier",
-  };
+  // Limite projets selon le plan
+  const projectLimit = plan?.maxProjects ?? 3;
+  const projectLimitReached = projectLimit !== -1 && projects.length >= projectLimit;
+
+  // Bannière essai : afficher si trial et ≤ 5 jours restants
+  const trialDaysLeft = (() => {
+    if (org?.subscriptionStatus !== "trial" || !org.trialEndsAt) return null;
+    const days = Math.ceil((new Date(org.trialEndsAt).getTime() - Date.now()) / 86400000);
+    return days;
+  })();
+  const showTrialBanner = trialDaysLeft !== null && trialDaysLeft <= 5 && currentMember?.role === "owner";
+
+  const visibleNavItems = NAV_ITEMS.filter(item => {
+    if (item.adminOnly) return isAdmin;
+    if (item.role) return item.role === currentMember?.role;
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-[#0a0a0b] text-gray-100">
@@ -94,6 +133,9 @@ export default function Home() {
             {currentMember && (
               <span className="hidden sm:inline text-xs text-gray-600 border border-white/5 rounded-full px-2 py-0.5">
                 {currentMember.name} · {ROLE_LABELS[currentMember.role]}
+                {plan && currentMember.role === "owner" && (
+                  <> · <span className="text-orange-400/70">{PLAN_LABELS[plan.name] ?? plan.label}</span></>
+                )}
               </span>
             )}
           </div>
@@ -101,10 +143,21 @@ export default function Home() {
           <div className="flex items-center gap-2">
             {currentMember?.role !== "worker" && (
               <button
-                onClick={() => setShowForm(!showForm)}
-                className="h-8 px-3 bg-orange-500 hover:bg-orange-400 text-white text-xs font-semibold rounded-lg transition-all duration-150 shadow-lg shadow-orange-500/20"
+                onClick={() => {
+                  if (projectLimitReached) {
+                    router.push("/subscription");
+                  } else {
+                    setShowForm(!showForm);
+                  }
+                }}
+                title={projectLimitReached ? `Limite de ${projectLimit} projets atteinte` : undefined}
+                className={`h-8 px-3 text-white text-xs font-semibold rounded-lg transition-all duration-150 shadow-lg ${
+                  projectLimitReached
+                    ? "bg-gray-600 hover:bg-gray-500 shadow-none cursor-pointer"
+                    : "bg-orange-500 hover:bg-orange-400 shadow-orange-500/20"
+                }`}
               >
-                + Nouveau chantier
+                {projectLimitReached ? "Limite atteinte" : "+ Nouveau chantier"}
               </button>
             )}
 
@@ -123,16 +176,34 @@ export default function Home() {
               {showNav && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setShowNav(false)} />
-                  <div className="absolute right-0 top-10 z-20 w-44 bg-[#111113] border border-white/10 rounded-xl shadow-2xl overflow-hidden">
-                    {NAV_ITEMS.filter(item => !item.role || item.role === currentMember?.role).map(item => (
+                  <div className="absolute right-0 top-10 z-20 w-52 bg-[#111113] border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+                    {visibleNavItems.filter(i => !i.adminOnly).map(item => (
                       <button
                         key={item.path}
                         onClick={() => { router.push(item.path); setShowNav(false); }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition-colors"
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition-colors flex items-center justify-between"
                       >
-                        {item.label}
+                        <span>{item.label}</span>
+                        {item.path === "/subscription" && plan && (
+                          <span className="text-xs text-orange-400/70">{PLAN_LABELS[plan.name] ?? plan.label}</span>
+                        )}
                       </button>
                     ))}
+
+                    {/* Séparateur + lien admin si applicable */}
+                    {isAdmin && (
+                      <>
+                        <div className="border-t border-white/5 mx-3 my-1" />
+                        <button
+                          onClick={() => { router.push("/admin"); setShowNav(false); }}
+                          className="w-full text-left px-4 py-2.5 text-sm text-orange-400 hover:text-orange-300 hover:bg-orange-500/5 transition-colors flex items-center gap-2"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+                          Administration
+                        </button>
+                      </>
+                    )}
+
                     <div className="border-t border-white/5" />
                     <button
                       onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }}
@@ -148,8 +219,27 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Formulaire */}
-      {showForm && currentMember?.role !== "worker" && (
+      {/* Bannière essai expirant */}
+      {showTrialBanner && (
+        <div className="bg-orange-500/10 border-b border-orange-500/20">
+          <div className="max-w-5xl mx-auto px-5 py-2.5 flex items-center justify-between gap-4">
+            <p className="text-sm text-orange-300">
+              {trialDaysLeft === 0
+                ? "⚠️ Votre période d'essai se termine aujourd'hui."
+                : `⏳ Votre période d'essai se termine dans ${trialDaysLeft} jour${trialDaysLeft > 1 ? "s" : ""}.`}
+            </p>
+            <button
+              onClick={() => router.push("/subscription")}
+              className="text-xs font-semibold text-orange-400 hover:text-orange-300 border border-orange-500/30 rounded-lg px-3 py-1.5 transition-colors flex-shrink-0"
+            >
+              Voir les plans →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Formulaire nouveau chantier */}
+      {showForm && currentMember?.role !== "worker" && !projectLimitReached && (
         <div className="border-b border-white/5 bg-[#0e0e10]">
           <div className="max-w-5xl mx-auto px-5 py-5 space-y-3">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Nouveau chantier</p>
@@ -192,16 +282,31 @@ export default function Home() {
         {!loading && projects.length > 0 && (
           <div className="grid grid-cols-4 gap-3">
             {[
-              { label: "Total",     value: counts.all,    color: "text-white"        },
-              { label: "En cours",  value: counts.active,  color: "text-emerald-400"  },
-              { label: "En pause",  value: counts.paused,  color: "text-amber-400"    },
-              { label: "Terminés",  value: counts.done,    color: "text-gray-500"     },
+              { label: "Total",    value: counts.all,    color: "text-white"       },
+              { label: "En cours", value: counts.active,  color: "text-emerald-400" },
+              { label: "En pause", value: counts.paused,  color: "text-amber-400"   },
+              { label: "Terminés", value: counts.done,    color: "text-gray-500"    },
             ].map(s => (
               <div key={s.label} className="bg-white/[0.03] border border-white/5 rounded-xl px-4 py-3">
                 <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
                 <p className="text-xs text-gray-600 mt-0.5">{s.label}</p>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Alerte limite projets atteinte */}
+        {projectLimitReached && currentMember?.role !== "worker" && (
+          <div className="flex items-center justify-between gap-4 bg-white/[0.03] border border-white/10 rounded-xl px-5 py-3.5">
+            <p className="text-sm text-gray-400">
+              Limite de <span className="text-white font-medium">{projectLimit} projets</span> atteinte sur votre plan {plan?.label}.
+            </p>
+            <button
+              onClick={() => router.push("/subscription")}
+              className="text-xs font-semibold text-orange-400 hover:text-orange-300 border border-orange-500/30 rounded-lg px-3 py-1.5 transition-colors flex-shrink-0"
+            >
+              Passer au Pro →
+            </button>
           </div>
         )}
 

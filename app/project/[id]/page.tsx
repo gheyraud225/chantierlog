@@ -100,11 +100,11 @@ export default function ProjectPage() {
 
   // Notes vocales
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [recordingError, setRecordingError] = useState("");
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -150,7 +150,6 @@ export default function ProjectPage() {
     }
     audioChunksRef.current = [];
 
-    // 1. Obtenir la permission micro en premier
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -159,60 +158,39 @@ export default function ProjectPage() {
       return;
     }
 
-    // 2. Lancer la transcription (Web Speech API) seulement après permission accordée
-    const SR = (window as Window & { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition
-      || (window as Window & { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition;
+    // Choisir le meilleur format supporté par le navigateur
+    const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"]
+      .find(t => MediaRecorder.isTypeSupported(t)) ?? "";
 
-    if (SR) {
-      const rec = new SR();
-      rec.lang = "fr-FR";
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.onresult = (e: SpeechRecognitionEvent) => {
-        let final = "";
-        for (let i = 0; i < e.results.length; i++) {
-          if (e.results[i].isFinal) final += e.results[i][0].transcript + " ";
-        }
-        setVoiceTranscript(final.trim());
-      };
-      rec.onerror = (e: SpeechRecognitionErrorEvent) => {
-        const msgs: Record<string, string> = {
-          "not-allowed": "Permission micro refusée par le navigateur.",
-          "no-speech": "",                // silencieux — pas d'erreur à afficher
-          "network": "La transcription nécessite une connexion Internet (service Google).",
-          "aborted": "",                  // arrêt normal
-          "service-not-allowed": "Transcription bloquée (contexte non sécurisé ou navigateur non supporté).",
-          "language-not-supported": "Langue fr-FR non supportée par ce navigateur.",
-        };
-        const msg = msgs[e.error];
-        if (msg !== undefined) {
-          if (msg) setRecordingError(msg);
-        } else {
-          setRecordingError(`Transcription indisponible (${e.error}). L'audio est quand même enregistré.`);
-        }
-      };
-      recognitionRef.current = rec;
-      try { rec.start(); } catch { /* ignoré si déjà démarré */ }
-    } else {
-      setRecordingError("Transcription non disponible sur ce navigateur (utilise Chrome ou Edge). L'audio est quand même enregistré.");
-    }
-
-    // 3. Lancer MediaRecorder avec le stream déjà obtenu
-    const mr = new MediaRecorder(stream);
+    const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     mediaRecorderRef.current = mr;
     mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-    mr.onstop = () => {
-      const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+    mr.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(audioChunksRef.current, { type: mimeType || "audio/webm" });
       setAudioBlob(blob);
       setAudioUrl(URL.createObjectURL(blob));
-      stream.getTracks().forEach(t => t.stop());
+
+      // Transcrire via Whisper (serveur)
+      setIsTranscribing(true);
+      try {
+        const form = new FormData();
+        form.append("audio", blob, `recording.${mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm"}`);
+        const res = await fetch("/api/ai/transcribe", { method: "POST", body: form });
+        const data = await res.json();
+        if (data.transcript) setVoiceTranscript(data.transcript);
+        else if (data.error) setRecordingError(data.error);
+      } catch {
+        setRecordingError("Impossible de contacter le serveur de transcription.");
+      } finally {
+        setIsTranscribing(false);
+      }
     };
     mr.start();
     setIsRecording(true);
   }
 
   function stopRecording() {
-    recognitionRef.current?.stop();
     mediaRecorderRef.current?.stop();
     setIsRecording(false);
   }
@@ -604,11 +582,17 @@ export default function ProjectPage() {
 
               {isRecording && (
                 <p className="text-xs text-gray-500 italic">
-                  Transcription en cours...{voiceTranscript && ` "${voiceTranscript.slice(0, 80)}..."`}
+                  Enregistrement en cours... Parle dans ton micro.
                 </p>
               )}
 
-              {voiceTranscript && !isRecording && (
+              {isTranscribing && !isRecording && (
+                <p className="text-xs text-blue-400 italic animate-pulse">
+                  Transcription en cours via Whisper...
+                </p>
+              )}
+
+              {voiceTranscript && !isRecording && !isTranscribing && (
                 <div className="bg-white/[0.03] border border-white/5 rounded-lg p-3">
                   <p className="text-xs text-gray-500 mb-1">Transcription :</p>
                   <p className="text-sm text-gray-300 leading-relaxed">{voiceTranscript}</p>

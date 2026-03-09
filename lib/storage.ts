@@ -398,6 +398,7 @@ export async function getLogs(projectId: string): Promise<DailyLog[]> {
     date: row.date,
     photos: row.photos ?? [],
     customFields: row.custom_fields ?? {},
+    title: row.title ?? undefined,
     voiceNoteUrl: row.voice_note_url ?? undefined,
     voiceNoteTranscript: row.voice_note_transcript ?? undefined,
     voiceNoteSummary: row.voice_note_summary ?? undefined,
@@ -410,6 +411,7 @@ export async function addLog(log: DailyLog): Promise<void> {
     project_id: log.projectId,
     author_id: log.authorId,
     author_name: log.authorName,
+    title: log.title ?? null,
     content: log.content,
     date: log.date,
     photos: log.photos,
@@ -434,9 +436,12 @@ export async function updateLogVoice(
 }
 
 export async function updateLog(log: Partial<DailyLog> & { id: string }): Promise<void> {
+  const update: Record<string, string | null> = {};
+  if (log.content !== undefined) update.content = log.content;
+  if (log.title !== undefined) update.title = log.title;
   const { error } = await supabase
     .from("daily_logs")
-    .update({ content: log.content })
+    .update(update)
     .eq("id", log.id);
   if (error) console.error(error);
 }

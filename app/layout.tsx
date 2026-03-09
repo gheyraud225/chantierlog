@@ -14,11 +14,20 @@ const outfit = Outfit({
 export const metadata: Metadata = {
   title: "ChantierLog",
   description: "Journal de chantier numérique",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "ChantierLog",
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#f97316",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

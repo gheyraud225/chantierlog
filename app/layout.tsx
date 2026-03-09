@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Outfit } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Toaster } from "sonner";
 import Link from "next/link";
 import "./globals.css";
 
@@ -51,6 +52,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
           </div>
         </footer>
+        <Toaster
+          position="bottom-right"
+          theme="dark"
+          toastOptions={{
+            style: {
+              background: "#111113",
+              border: "1px solid rgba(255,255,255,0.08)",
+              color: "#e5e7eb",
+              fontSize: "14px",
+            },
+          }}
+        />
         <Analytics />
         <SpeedInsights />
       </body>

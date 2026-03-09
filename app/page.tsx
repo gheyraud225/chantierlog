@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Project, ProjectStatus, OrganizationMember, NewProject, SubscriptionPlan, Organization } from "@/lib/types";
 import {
   getProjects, addProject, deleteProject, getCurrentMember,
@@ -55,6 +56,7 @@ export default function Home() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [plan, setPlan] = useState<SubscriptionPlan | null>(null);
   const [org, setOrg] = useState<Organization | null>(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -82,20 +84,34 @@ export default function Home() {
       status: "active",
       createdAt: new Date().toISOString(),
     };
+    const toastId = toast.loading("Création du chantier...");
     const created = await addProject(partial as Project);
-    if (created) setProjects(prev => [created, ...prev]);
+    if (created) {
+      setProjects(prev => [created, ...prev]);
+      toast.success("Chantier créé", { id: toastId });
+    } else {
+      toast.error("Erreur lors de la création", { id: toastId });
+    }
     setName("");
     setClientName("");
     setShowForm(false);
   }
 
   async function handleDelete(id: string) {
+    const name = projects.find(p => p.id === id)?.name ?? "ce chantier";
     await deleteProject(id);
     setProjects(prev => prev.filter(p => p.id !== id));
     setConfirmDeleteId(null);
+    toast.success(`"${name}" supprimé`);
   }
 
-  const filtered = filter === "all" ? projects : projects.filter(p => p.status === filter);
+  const filtered = projects
+    .filter(p => filter === "all" || p.status === filter)
+    .filter(p => {
+      if (!search.trim()) return true;
+      const q = search.toLowerCase();
+      return p.name.toLowerCase().includes(q) || p.clientName.toLowerCase().includes(q);
+    });
   const counts = {
     all: projects.length,
     active: projects.filter(p => p.status === "active").length,
@@ -310,37 +326,84 @@ export default function Home() {
           </div>
         )}
 
-        {/* Filtres */}
-        <div className="flex gap-1 bg-white/[0.03] border border-white/5 rounded-xl p-1 w-fit">
-          {(["all", "active", "paused", "done"] as const).map(s => (
-            <button
-              key={s}
-              onClick={() => setFilter(s)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
-                filter === s
-                  ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20"
-                  : "text-gray-500 hover:text-gray-300"
-              }`}
-            >
-              {s === "all" ? "Tous" : STATUS_LABELS[s]}
-            </button>
-          ))}
+        {/* Filtres + recherche */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex gap-1 bg-white/[0.03] border border-white/5 rounded-xl p-1 w-fit">
+            {(["all", "active", "paused", "done"] as const).map(s => (
+              <button
+                key={s}
+                onClick={() => setFilter(s)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
+                  filter === s
+                    ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20"
+                    : "text-gray-500 hover:text-gray-300"
+                }`}
+              >
+                {s === "all" ? "Tous" : STATUS_LABELS[s]}
+              </button>
+            ))}
+          </div>
+          {projects.length > 3 && (
+            <div className="relative flex-1 max-w-xs">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 w-3.5 h-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+              </svg>
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Rechercher..."
+                className="w-full pl-9 pr-4 py-1.5 bg-white/[0.03] border border-white/5 rounded-xl text-xs text-gray-300 placeholder-gray-600 focus:outline-none focus:border-orange-500/30 transition-colors"
+              />
+            </div>
+          )}
         </div>
 
         {/* Liste */}
         <div className="space-y-2">
           {loading && (
-            <div className="text-center py-16 text-gray-700 text-sm">Chargement...</div>
+            <div className="space-y-2">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="bg-white/[0.03] border border-white/5 rounded-xl px-5 py-4 animate-pulse">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-white/10 flex-shrink-0" />
+                    <div className="h-4 bg-white/10 rounded w-1/3" />
+                    <div className="h-4 bg-white/10 rounded w-16" />
+                  </div>
+                  <div className="h-3 bg-white/5 rounded w-1/4 ml-4" />
+                </div>
+              ))}
+            </div>
           )}
 
           {!loading && filtered.length === 0 && (
-            <div className="text-center py-16 space-y-2">
-              <p className="text-3xl">🏗️</p>
-              <p className="text-gray-600 text-sm">
-                {currentMember?.role === "worker"
-                  ? "Aucun chantier assigné pour l'instant."
-                  : "Aucun chantier. Créez-en un pour commencer."}
-              </p>
+            <div className="text-center py-16 space-y-4">
+              <p className="text-4xl">🏗️</p>
+              {search ? (
+                <>
+                  <p className="text-gray-500 text-sm">Aucun résultat pour « {search} »</p>
+                  <button onClick={() => setSearch("")} className="text-xs text-orange-400 hover:text-orange-300 border border-orange-500/20 rounded-lg px-4 py-2 transition-colors">
+                    Effacer la recherche
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-gray-500 text-sm font-medium">
+                    {currentMember?.role === "worker"
+                      ? "Aucun chantier assigné pour l'instant."
+                      : filter !== "all"
+                        ? `Aucun chantier « ${STATUS_LABELS[filter]} ».`
+                        : "Commencez par créer votre premier chantier."}
+                  </p>
+                  {currentMember?.role !== "worker" && filter === "all" && !projectLimitReached && (
+                    <button
+                      onClick={() => setShowForm(true)}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-orange-500 hover:bg-orange-400 text-white text-sm font-semibold rounded-xl transition-colors shadow-lg shadow-orange-500/20"
+                    >
+                      + Nouveau chantier
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           )}
 

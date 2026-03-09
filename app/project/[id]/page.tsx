@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   getLogs, addLog, deleteLog, getProjects,
   updateProject, updateLog, updateLogVoice, getCurrentUser,
@@ -100,6 +101,9 @@ export default function ProjectPage() {
   const [activePanel, setActivePanel] = useState<"team" | "fields" | "edit" | null>(null);
   const [plan, setPlan] = useState<SubscriptionPlan | null>(null);
 
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // Notes vocales
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -143,7 +147,9 @@ export default function ProjectPage() {
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      setRecordingError("Accès au microphone refusé. Vérifie les permissions du navigateur.");
+      const msg = "Accès au microphone refusé. Vérifie les permissions du navigateur.";
+      setRecordingError(msg);
+      toast.error(msg);
       return;
     }
 
@@ -160,6 +166,7 @@ export default function ProjectPage() {
 
       // Transcrire via Whisper (serveur)
       setIsTranscribing(true);
+      const transcribeToastId = toast.loading("Transcription en cours...");
       let transcript = "";
       try {
         const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
@@ -170,11 +177,15 @@ export default function ProjectPage() {
         if (data.transcript) {
           transcript = data.transcript;
           setVoiceTranscript(transcript);
+          toast.success("Transcription terminée", { id: transcribeToastId });
         } else if (data.error) {
           setRecordingError(data.error);
+          toast.error(data.error, { id: transcribeToastId });
         }
       } catch {
-        setRecordingError("Impossible de contacter le serveur de transcription.");
+        const msg = "Impossible de contacter le serveur de transcription.";
+        setRecordingError(msg);
+        toast.error(msg, { id: transcribeToastId });
       } finally {
         setIsTranscribing(false);
       }
@@ -204,11 +215,17 @@ export default function ProjectPage() {
     };
     mr.start();
     setIsRecording(true);
+    setRecordingSeconds(0);
+    recordingTimerRef.current = setInterval(() => setRecordingSeconds(s => s + 1), 1000);
   }
 
   function stopRecording() {
     mediaRecorderRef.current?.stop();
     setIsRecording(false);
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
   }
 
   function clearVoiceNote() {
@@ -219,6 +236,7 @@ export default function ProjectPage() {
   async function handleImprove() {
     if (!content.trim() || content.length < 20) return;
     setIsImproving(true);
+    const toastId = toast.loading("Amélioration en cours...");
     try {
       const res = await fetch("/api/ai/summarize", {
         method: "POST",
@@ -229,7 +247,12 @@ export default function ProjectPage() {
         const { title, summary } = await res.json();
         if (summary) setContent(summary);
         if (title) setNoteTitle(title);
+        toast.success("Note améliorée par l'IA", { id: toastId });
+      } else {
+        toast.error("Erreur lors de l'amélioration", { id: toastId });
       }
+    } catch {
+      toast.error("Impossible de contacter le serveur", { id: toastId });
     } finally {
       setIsImproving(false);
     }
@@ -251,6 +274,7 @@ export default function ProjectPage() {
       customFields: customFieldValues,
       voiceNoteTranscript: voiceTranscript || undefined,
     };
+    const toastId = toast.loading("Enregistrement...");
     await addLog(newLog);
     setLogs(prev => [...prev, newLog]);
     setContent("");
@@ -258,6 +282,7 @@ export default function ProjectPage() {
     setPendingPhotos([]);
     setCustomFieldValues({});
     clearVoiceNote();
+    toast.success("Note ajoutée", { id: toastId });
   }
 
   async function handleSummarize(log: DailyLog) {
@@ -285,6 +310,7 @@ export default function ProjectPage() {
     await deleteLog(logId);
     setLogs(prev => prev.filter(log => log.id !== logId));
     setConfirmDeleteLogId(null);
+    toast.success("Note supprimée");
   }
 
   async function handleUpdateProject() {
@@ -296,16 +322,20 @@ export default function ProjectPage() {
       description: editDescription, status: editStatus,
       startDate: editStartDate, endDate: editEndDate,
     };
+    const toastId = toast.loading("Sauvegarde...");
     await updateProject(updated);
     setProject(updated);
     setActivePanel(null);
+    toast.success("Chantier mis à jour", { id: toastId });
   }
 
   const handleUpdateLog = useCallback(async (logId: string) => {
     if (!editLogContent.trim()) return;
+    const toastId = toast.loading("Sauvegarde...");
     await updateLog({ ...logs.find(l => l.id === logId)!, content: editLogContent });
     setLogs(logs.map(log => log.id === logId ? { ...log, content: editLogContent } : log));
     setEditingLogId(null);
+    toast.success("Note modifiée", { id: toastId });
   }, [editLogContent, logs]);
 
   async function handleAssign(userId: string) {
@@ -341,7 +371,7 @@ export default function ProjectPage() {
     const maxPhotos = plan?.maxPhotosPerLog ?? 3;
     const files = Array.from(e.target.files ?? []);
     if (pendingPhotos.length + files.length > maxPhotos) {
-      alert(`Maximum ${maxPhotos} photos par note (votre abonnement).`);
+      toast.error(`Maximum ${maxPhotos} photos par note (votre abonnement)`);
       return;
     }
     const base64List = await Promise.all(files.map(readFileAsBase64));
@@ -433,7 +463,16 @@ export default function ProjectPage() {
                   Modifier
                 </button>
                 <button
-                  onClick={() => project && generatePDF(logs, project, pdfSettings ?? undefined)}
+                  onClick={async () => {
+                    if (!project) return;
+                    const toastId = toast.loading("Génération du PDF...");
+                    try {
+                      await generatePDF(logs, project, pdfSettings ?? undefined);
+                      toast.success("PDF téléchargé", { id: toastId });
+                    } catch {
+                      toast.error("Erreur lors de la génération du PDF", { id: toastId });
+                    }
+                  }}
                   disabled={!project}
                   className="h-8 px-3 bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-white text-xs font-semibold rounded-lg transition-colors shadow-lg shadow-orange-500/20"
                 >
@@ -612,10 +651,13 @@ export default function ProjectPage() {
               ) : (
                 <button
                   onClick={stopRecording}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg text-sm text-red-400 transition-all animate-pulse"
+                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg text-sm text-red-400 transition-all"
                 >
-                  <span className="w-2 h-2 rounded-full bg-red-400" />
-                  Arrêter l&apos;enregistrement
+                  <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+                  Arrêter
+                  <span className="font-mono text-xs ml-1 opacity-80">
+                    {String(Math.floor(recordingSeconds / 60)).padStart(2, "0")}:{String(recordingSeconds % 60).padStart(2, "0")}
+                  </span>
                 </button>
               )}
 
@@ -733,9 +775,26 @@ export default function ProjectPage() {
             </p>
           </div>
 
-          {loading && <div className="text-center py-12 text-gray-700 text-sm">Chargement...</div>}
+          {loading && (
+            <div className="space-y-3">
+              {[...Array(2)].map((_, i) => (
+                <div key={i} className="bg-white/[0.03] border border-white/5 rounded-2xl p-5 animate-pulse space-y-3">
+                  <div className="h-3 bg-white/10 rounded w-48" />
+                  <div className="h-3 bg-white/10 rounded w-20" />
+                  <div className="space-y-2 pt-1">
+                    <div className="h-3 bg-white/[0.07] rounded w-full" />
+                    <div className="h-3 bg-white/[0.07] rounded w-3/4" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {!loading && logs.length === 0 && (
-            <div className="text-center py-12 text-gray-700 text-sm">Aucune note pour ce chantier.</div>
+            <div className="text-center py-12 space-y-3">
+              <p className="text-3xl">📋</p>
+              <p className="text-gray-500 text-sm">Aucune note pour ce chantier.</p>
+              <p className="text-gray-700 text-xs">Utilisez le formulaire ci-dessus pour ajouter votre première note.</p>
+            </div>
           )}
 
           {/* Timeline */}

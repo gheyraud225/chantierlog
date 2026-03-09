@@ -150,8 +150,19 @@ export default function ProjectPage() {
     }
     audioChunksRef.current = [];
 
-    // Speech recognition (transcription temps réel)
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    // 1. Obtenir la permission micro en premier
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setRecordingError("Accès au microphone refusé. Vérifie les permissions du navigateur.");
+      return;
+    }
+
+    // 2. Lancer la transcription (Web Speech API) seulement après permission accordée
+    const SR = (window as Window & { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition
+      || (window as Window & { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition;
+
     if (SR) {
       const rec = new SR();
       rec.lang = "fr-FR";
@@ -162,31 +173,42 @@ export default function ProjectPage() {
         for (let i = 0; i < e.results.length; i++) {
           if (e.results[i].isFinal) final += e.results[i][0].transcript + " ";
         }
-        setVoiceTranscript(final);
+        setVoiceTranscript(final.trim());
       };
-      rec.onerror = () => setRecordingError("Transcription indisponible.");
+      rec.onerror = (e: SpeechRecognitionErrorEvent) => {
+        const msgs: Record<string, string> = {
+          "not-allowed": "Permission micro refusée par le navigateur.",
+          "no-speech": "",                // silencieux — pas d'erreur à afficher
+          "network": "La transcription nécessite une connexion Internet (service Google).",
+          "aborted": "",                  // arrêt normal
+          "service-not-allowed": "Transcription bloquée (contexte non sécurisé ou navigateur non supporté).",
+          "language-not-supported": "Langue fr-FR non supportée par ce navigateur.",
+        };
+        const msg = msgs[e.error];
+        if (msg !== undefined) {
+          if (msg) setRecordingError(msg);
+        } else {
+          setRecordingError(`Transcription indisponible (${e.error}). L'audio est quand même enregistré.`);
+        }
+      };
       recognitionRef.current = rec;
-      rec.start();
+      try { rec.start(); } catch { /* ignoré si déjà démarré */ }
+    } else {
+      setRecordingError("Transcription non disponible sur ce navigateur (utilise Chrome ou Edge). L'audio est quand même enregistré.");
     }
 
-    // MediaRecorder (enregistrement audio)
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
-      mediaRecorderRef.current = mr;
-      mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      mr.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        setAudioBlob(blob);
-        setAudioUrl(URL.createObjectURL(blob));
-        stream.getTracks().forEach(t => t.stop());
-      };
-      mr.start();
-      setIsRecording(true);
-    } catch {
-      setRecordingError("Accès au microphone refusé.");
-      recognitionRef.current?.stop();
-    }
+    // 3. Lancer MediaRecorder avec le stream déjà obtenu
+    const mr = new MediaRecorder(stream);
+    mediaRecorderRef.current = mr;
+    mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+    mr.onstop = () => {
+      const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      setAudioBlob(blob);
+      setAudioUrl(URL.createObjectURL(blob));
+      stream.getTracks().forEach(t => t.stop());
+    };
+    mr.start();
+    setIsRecording(true);
   }
 
   function stopRecording() {

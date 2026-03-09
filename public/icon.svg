@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fb923c"/>
+      <stop offset="100%" stop-color="#c2410c"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+  <!-- Hammer handle -->
+  <rect x="232" y="272" width="48" height="156" rx="12" fill="white" opacity="0.95"/>
+  <!-- Hammer head -->
+  <rect x="156" y="148" width="200" height="88" rx="20" fill="white" opacity="0.95"/>
+  <!-- Hammer claw cutout feel -->
+  <rect x="168" y="160" width="80" height="64" rx="10" fill="url(#g)"/>
+</svg>

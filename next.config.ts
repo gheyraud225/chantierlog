@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import withPWA from "@ducanh2912/next-pwa";
 
 const securityHeaders = [
   { key: "X-DNS-Prefetch-Control",      value: "on" },
@@ -19,7 +20,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       // Fonts Google
       "font-src 'self' https://fonts.gstatic.com",
-      // Images : data: pour les photos base64 stockées, blob: pour l'audio
+      // Images : data: pour les photos base64, blob: pour l'audio
       "img-src 'self' data: blob: https://*.supabase.co",
       // Audio blob pour la lecture des notes vocales
       "media-src 'self' blob: https://*.supabase.co",
@@ -27,6 +28,8 @@ const securityHeaders = [
       "frame-src https://appleid.apple.com https://accounts.google.com",
       "form-action 'self'",
       "base-uri 'self'",
+      // Service Worker (PWA)
+      "worker-src 'self'",
     ].join("; "),
   },
 ];
@@ -42,4 +45,13 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withPWA({
+  dest: "public",
+  cacheOnFrontEndNav: true,
+  aggressiveFrontEndNavCaching: true,
+  reloadOnOnline: true,
+  disable: process.env.NODE_ENV === "development",
+  workboxOptions: {
+    disableDevLogs: true,
+  },
+})(nextConfig);

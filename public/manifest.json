@@ -1,0 +1,36 @@
+{
+  "name": "ChantierLog",
+  "short_name": "ChantierLog",
+  "description": "Journal de chantier numérique — notes, photos, rapports PDF.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0a0b",
+  "theme_color": "#f97316",
+  "categories": ["business", "productivity"],
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Nouveau projet",
+      "short_name": "Projet",
+      "description": "Créer un nouveau chantier",
+      "url": "/?new=project"
+    }
+  ]
+}

@@ -398,25 +398,26 @@ export default function ProjectPage() {
   const canUseAI = plan?.aiSummary ?? false;
   const maxPhotos = plan?.maxPhotosPerLog ?? 3;
 
-  const inputClass = "w-full bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2.5 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-orange-500/50 focus:bg-white/[0.06] transition-all";
+  const inputClass = "w-full bg-white/[0.04] border border-white/10 rounded-lg px-4 py-3 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/30 focus:bg-white/[0.06] transition-all";
 
   return (
     <div className="min-h-screen bg-[#0a0a0b] text-gray-100">
 
       {/* Header */}
       <header className="sticky top-0 z-30 border-b border-white/5 bg-[#0a0a0b]/80 backdrop-blur-xl">
-        <div className="max-w-3xl mx-auto px-5 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               onClick={() => router.push("/")}
-              className="text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0"
+              className="h-9 w-9 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-200 hover:bg-white/5 transition-all flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+              aria-label="Retour"
             >
               ←
             </button>
             <div className="min-w-0">
-              <h1 className="font-semibold text-white truncate">{project?.name ?? ""}</h1>
-              <div className="flex items-center gap-2">
-                <p className="text-xs text-gray-600 truncate">
+              <h1 className="font-semibold text-white truncate text-sm sm:text-base">{project?.name ?? ""}</h1>
+              <div className="flex items-center gap-1.5">
+                <p className="text-xs text-gray-500 truncate">
                   {project?.clientName}
                   {project?.city ? ` · ${project.city}` : ""}
                 </p>
@@ -429,12 +430,13 @@ export default function ProjectPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
             {currentMember?.role !== "worker" && (
               <>
+                {/* Desktop buttons */}
                 <button
                   onClick={() => setActivePanel(activePanel === "team" ? null : "team")}
-                  className={`h-8 px-3 rounded-lg text-xs font-medium transition-colors border ${
+                  className={`hidden sm:flex h-9 px-3 rounded-lg text-xs font-medium transition-all border items-center focus:outline-none focus:ring-2 focus:ring-orange-500/40 ${
                     activePanel === "team"
                       ? "bg-white/10 border-white/20 text-white"
                       : "border-white/5 text-gray-500 hover:text-gray-300 hover:border-white/10"
@@ -444,7 +446,7 @@ export default function ProjectPage() {
                 </button>
                 <button
                   onClick={() => setActivePanel(activePanel === "fields" ? null : "fields")}
-                  className={`h-8 px-3 rounded-lg text-xs font-medium transition-colors border ${
+                  className={`hidden sm:flex h-9 px-3 rounded-lg text-xs font-medium transition-all border items-center focus:outline-none focus:ring-2 focus:ring-orange-500/40 ${
                     activePanel === "fields"
                       ? "bg-white/10 border-white/20 text-white"
                       : "border-white/5 text-gray-500 hover:text-gray-300 hover:border-white/10"
@@ -454,7 +456,7 @@ export default function ProjectPage() {
                 </button>
                 <button
                   onClick={openEdit}
-                  className={`h-8 px-3 rounded-lg text-xs font-medium transition-colors border ${
+                  className={`hidden sm:flex h-9 px-3 rounded-lg text-xs font-medium transition-all border items-center focus:outline-none focus:ring-2 focus:ring-orange-500/40 ${
                     activePanel === "edit"
                       ? "bg-white/10 border-white/20 text-white"
                       : "border-white/5 text-gray-500 hover:text-gray-300 hover:border-white/10"
@@ -462,6 +464,53 @@ export default function ProjectPage() {
                 >
                   Modifier
                 </button>
+
+                {/* Mobile: compact action menu */}
+                <div className="relative sm:hidden">
+                  <button
+                    onClick={() => setActivePanel(activePanel ? null : "team")}
+                    className={`h-9 w-9 rounded-lg border flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-orange-500/40 ${
+                      activePanel && activePanel !== "edit"
+                        ? "bg-white/10 border-white/20 text-white"
+                        : "border-white/5 text-gray-500 hover:text-gray-300"
+                    }`}
+                    aria-label="Menu"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <circle cx="7" cy="2" r="1.5" fill="currentColor"/>
+                      <circle cx="7" cy="7" r="1.5" fill="currentColor"/>
+                      <circle cx="7" cy="12" r="1.5" fill="currentColor"/>
+                    </svg>
+                  </button>
+                  {activePanel && activePanel !== "edit" && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setActivePanel(null)} />
+                      <div className="absolute right-0 top-11 z-20 w-44 bg-[#111113] border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+                        {["team", "fields"].map(panel => (
+                          <button
+                            key={panel}
+                            onClick={() => setActivePanel(activePanel === panel ? null : panel as "team" | "fields")}
+                            className={`w-full text-left px-4 py-3 text-sm transition-colors ${
+                              activePanel === panel
+                                ? "text-orange-400 bg-orange-500/5"
+                                : "text-gray-300 hover:text-white hover:bg-white/5"
+                            }`}
+                          >
+                            {panel === "team" ? `Équipe${projectMembers.length > 0 ? ` (${projectMembers.length})` : ""}` : `Champs${projectFields.length > 0 ? ` (${projectFields.length})` : ""}`}
+                          </button>
+                        ))}
+                        <div className="border-t border-white/5" />
+                        <button
+                          onClick={() => { openEdit(); }}
+                          className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition-colors"
+                        >
+                          Modifier le chantier
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+
                 <button
                   onClick={async () => {
                     if (!project) return;
@@ -474,7 +523,7 @@ export default function ProjectPage() {
                     }
                   }}
                   disabled={!project}
-                  className="h-8 px-3 bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-white text-xs font-semibold rounded-lg transition-colors shadow-lg shadow-orange-500/20"
+                  className="h-9 px-3 bg-orange-500 hover:bg-orange-400 active:bg-orange-600 disabled:opacity-40 text-white text-xs font-semibold rounded-lg transition-all shadow-lg shadow-orange-500/20 focus:outline-none focus:ring-2 focus:ring-orange-500/60"
                 >
                   PDF
                 </button>
@@ -507,8 +556,8 @@ export default function ProjectPage() {
               <textarea value={editDescription} onChange={e => setEditDescription(e.target.value)} placeholder="Description" rows={3} className={`col-span-2 resize-none ${inputClass}`} />
             </div>
             <div className="flex gap-2">
-              <button onClick={handleUpdateProject} className="px-4 py-2 bg-orange-500 hover:bg-orange-400 text-white text-sm font-semibold rounded-lg transition-colors">Sauvegarder</button>
-              <button onClick={() => setActivePanel(null)} className="px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-400 text-sm font-semibold rounded-lg transition-colors">Annuler</button>
+              <button onClick={handleUpdateProject} className="px-5 py-2.5 bg-orange-500 hover:bg-orange-400 active:bg-orange-600 text-white text-sm font-semibold rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-orange-500/50">Sauvegarder</button>
+              <button onClick={() => setActivePanel(null)} className="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-gray-400 text-sm font-semibold rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-white/20">Annuler</button>
             </div>
           </div>
         </div>
@@ -604,7 +653,7 @@ export default function ProjectPage() {
             placeholder="Titre de la note (optionnel — généré automatiquement par l'IA)"
             className={inputClass}
           />
-          <div className="relative">
+          <div className="space-y-2">
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
@@ -612,18 +661,21 @@ export default function ProjectPage() {
               rows={4}
               className={`resize-none ${inputClass}`}
             />
-            {canUseAI && content.length > 20 && !isImproving && !isAutoSummarizing && !isRecording && (
-              <button
-                onClick={handleImprove}
-                className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 text-xs text-orange-400 hover:text-orange-300 bg-black/50 hover:bg-black/70 border border-orange-500/20 rounded-lg transition-all"
-              >
-                ✨ Améliorer avec l&apos;IA
-              </button>
-            )}
-            {isImproving && (
-              <div className="absolute bottom-2 right-2 flex items-center gap-1.5 px-2 py-1 text-xs text-orange-400 bg-black/50 border border-orange-500/20 rounded-lg">
-                <span className="w-3 h-3 border border-orange-400 border-t-transparent rounded-full animate-spin" />
-                Amélioration...
+            {canUseAI && !isRecording && (
+              <div className="flex justify-end">
+                {isImproving || isAutoSummarizing ? (
+                  <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-orange-400 bg-orange-500/5 border border-orange-500/20 rounded-lg">
+                    <span className="w-3 h-3 border border-orange-400 border-t-transparent rounded-full animate-spin" />
+                    {isAutoSummarizing ? "Résumé IA en cours..." : "Amélioration..."}
+                  </div>
+                ) : content.length > 20 ? (
+                  <button
+                    onClick={handleImprove}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-orange-400 hover:text-orange-300 bg-orange-500/5 hover:bg-orange-500/10 border border-orange-500/20 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+                  >
+                    ✨ Améliorer avec l&apos;IA
+                  </button>
+                ) : null}
               </div>
             )}
           </div>
@@ -716,7 +768,8 @@ export default function ProjectPage() {
                     <img src={photo.base64} alt="" className="w-16 h-16 object-cover rounded-lg border border-white/10" />
                     <button
                       onClick={() => setPendingPhotos(prev => prev.filter(p => p.id !== photo.id))}
-                      className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 text-xs items-center justify-center hidden group-hover:flex"
+                      className="absolute -top-1.5 -right-1.5 bg-red-500 hover:bg-red-400 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center transition-colors shadow-md opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none"
+                      aria-label="Supprimer la photo"
                     >×</button>
                   </div>
                 ))}
@@ -761,7 +814,7 @@ export default function ProjectPage() {
           <button
             onClick={handleSubmit}
             disabled={!content.trim() && !voiceTranscript.trim()}
-            className="w-full py-2.5 bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-white font-semibold rounded-lg transition-colors text-sm shadow-lg shadow-orange-500/20"
+            className="w-full py-3 bg-orange-500 hover:bg-orange-400 active:bg-orange-600 disabled:opacity-40 text-white font-semibold rounded-xl transition-all text-sm shadow-lg shadow-orange-500/20 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
           >
             Ajouter la note
           </button>

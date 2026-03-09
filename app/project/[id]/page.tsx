@@ -1,16 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   getLogs, addLog, deleteLog, getProjects,
-  updateProject, updateLog, getCurrentUser,
+  updateProject, updateLog, updateLogVoice, getCurrentUser,
   getCurrentMember, getOrgMembers,
   getProjectMembers, addProjectMember, removeProjectMember,
   getFieldTemplates, getProjectFieldTemplates, toggleProjectField,
-  getPdfSettings
+  getPdfSettings, getOrgSubscriptionPlan,
 } from "@/lib/storage";
-import { DailyLog, Photo, Project, ProjectStatus, OrganizationMember, FieldTemplate, PdfSettings } from "@/lib/types";
+import { DailyLog, Photo, Project, ProjectStatus, OrganizationMember, FieldTemplate, PdfSettings, SubscriptionPlan } from "@/lib/types";
 import { generatePDF } from "@/lib/pdf";
 import ConfirmDialog from "@/components/ConfirmDialog";
 
@@ -22,6 +22,43 @@ const STATUS_COLORS: Record<ProjectStatus, string> = {
   paused: "text-amber-400 bg-amber-400/10",
   done:   "text-gray-400 bg-gray-400/10",
 };
+
+// Web Speech API types
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognition;
+    webkitSpeechRecognition: new () => SpeechRecognition;
+  }
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start(): void;
+  stop(): void;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: Event) => void) | null;
+}
+
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+}
 
 export default function ProjectPage() {
   const { id } = useParams() as { id: string };
@@ -53,50 +90,174 @@ export default function ProjectPage() {
   const [currentMember, setCurrentMember] = useState<OrganizationMember | null>(null);
   const [orgMembers, setOrgMembers] = useState<OrganizationMember[]>([]);
   const [projectMembers, setProjectMembers] = useState<OrganizationMember[]>([]);
-  const [showTeam, setShowTeam] = useState(false);
   const [allFields, setAllFields] = useState<FieldTemplate[]>([]);
   const [projectFields, setProjectFields] = useState<FieldTemplate[]>([]);
-  const [showFields, setShowFields] = useState(false);
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string | number | boolean>>({});
   const [pdfSettings, setPdfSettings] = useState<PdfSettings | null>(null);
   const [confirmDeleteLogId, setConfirmDeleteLogId] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<"team" | "fields" | "edit" | null>(null);
+  const [plan, setPlan] = useState<SubscriptionPlan | null>(null);
+
+  // Notes vocales
+  const [isRecording, setIsRecording] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [recordingError, setRecordingError] = useState("");
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  // Résumé IA
+  const [summarizingLogId, setSummarizingLogId] = useState<string | null>(null);
+
+  // Unused state suppression
+  void editingProject;
 
   useEffect(() => {
     Promise.all([
       getProjects(), getLogs(id), getCurrentMember(), getOrgMembers(),
-      getProjectMembers(id), getFieldTemplates(), getProjectFieldTemplates(id), getPdfSettings(),
-    ]).then(([projects, logs, me, org, pm, allF, projF, pdfS]) => {
+      getProjectMembers(id), getFieldTemplates(), getProjectFieldTemplates(id),
+      getPdfSettings(), getOrgSubscriptionPlan(),
+    ]).then(([projects, logsData, me, org, pm, allF, projF, pdfS, planData]) => {
       setProject(projects.find(p => p.id === id) ?? null);
-      setLogs(logs);
+      setLogs(logsData);
       setCurrentMember(me);
       setOrgMembers(org);
       setProjectMembers(pm);
       setAllFields(allF);
       setProjectFields(projF);
       setPdfSettings(pdfS);
+      setPlan(planData);
       setLoading(false);
     });
   }, [id]);
 
+  // Nettoyage de l'URL audio lors du démontage
+  useEffect(() => {
+    return () => {
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+    };
+  }, [audioUrl]);
+
+  async function startRecording() {
+    setRecordingError("");
+    setVoiceTranscript("");
+    setAudioBlob(null);
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+      setAudioUrl(null);
+    }
+    audioChunksRef.current = [];
+
+    // Speech recognition (transcription temps réel)
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SR) {
+      const rec = new SR();
+      rec.lang = "fr-FR";
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.onresult = (e: SpeechRecognitionEvent) => {
+        let final = "";
+        for (let i = 0; i < e.results.length; i++) {
+          if (e.results[i].isFinal) final += e.results[i][0].transcript + " ";
+        }
+        setVoiceTranscript(final);
+      };
+      rec.onerror = () => setRecordingError("Transcription indisponible.");
+      recognitionRef.current = rec;
+      rec.start();
+    }
+
+    // MediaRecorder (enregistrement audio)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      mediaRecorderRef.current = mr;
+      mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        setAudioBlob(blob);
+        setAudioUrl(URL.createObjectURL(blob));
+        stream.getTracks().forEach(t => t.stop());
+      };
+      mr.start();
+      setIsRecording(true);
+    } catch {
+      setRecordingError("Accès au microphone refusé.");
+      recognitionRef.current?.stop();
+    }
+  }
+
+  function stopRecording() {
+    recognitionRef.current?.stop();
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
+  }
+
+  function clearVoiceNote() {
+    setVoiceTranscript("");
+    setAudioBlob(null);
+    if (audioUrl) { URL.revokeObjectURL(audioUrl); setAudioUrl(null); }
+    setRecordingError("");
+  }
+
   async function handleSubmit() {
-    if (!content.trim()) return;
+    if (!content.trim() && !voiceTranscript.trim()) return;
     const user = await getCurrentUser();
+
+    // Upload audio si présent (Supabase Storage)
+    let uploadedAudioUrl: string | undefined;
+    if (audioBlob) {
+      const filename = `${crypto.randomUUID()}.webm`;
+      const { data: uploadData } = await import("@/lib/supabase").then(m =>
+        m.supabase.storage.from("voice-notes").upload(filename, audioBlob, { contentType: "audio/webm" })
+      );
+      if (uploadData) {
+        const { data: { publicUrl } } = (await import("@/lib/supabase")).supabase.storage
+          .from("voice-notes")
+          .getPublicUrl(filename);
+        uploadedAudioUrl = publicUrl;
+      }
+    }
+
     const newLog: DailyLog = {
       id: crypto.randomUUID(),
       projectId: id,
       authorId: user?.id ?? "",
       authorName: author,
-      content,
+      content: content || voiceTranscript,
       date: new Date().toISOString(),
       photos: pendingPhotos,
       customFields: customFieldValues,
+      voiceNoteUrl: uploadedAudioUrl,
+      voiceNoteTranscript: voiceTranscript || undefined,
     };
     await addLog(newLog);
     setLogs(prev => [...prev, newLog]);
     setContent("");
     setPendingPhotos([]);
     setCustomFieldValues({});
+    clearVoiceNote();
+  }
+
+  async function handleSummarize(log: DailyLog) {
+    if (!log.voiceNoteTranscript && !log.content) return;
+    setSummarizingLogId(log.id);
+    try {
+      const res = await fetch("/api/ai/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript: log.voiceNoteTranscript ?? log.content, logId: log.id }),
+      });
+      if (res.ok) {
+        const { summary } = await res.json();
+        await updateLogVoice(log.id, { voiceNoteSummary: summary });
+        setLogs(prev => prev.map(l => l.id === log.id ? { ...l, voiceNoteSummary: summary } : l));
+      }
+    } finally {
+      setSummarizingLogId(null);
+    }
   }
 
   async function handleDelete(logId: string) {
@@ -119,12 +280,12 @@ export default function ProjectPage() {
     setActivePanel(null);
   }
 
-  async function handleUpdateLog(logId: string) {
+  const handleUpdateLog = useCallback(async (logId: string) => {
     if (!editLogContent.trim()) return;
     await updateLog({ ...logs.find(l => l.id === logId)!, content: editLogContent });
     setLogs(logs.map(log => log.id === logId ? { ...log, content: editLogContent } : log));
     setEditingLogId(null);
-  }
+  }, [editLogContent, logs]);
 
   async function handleAssign(userId: string) {
     await addProjectMember(id, userId);
@@ -156,8 +317,12 @@ export default function ProjectPage() {
   }
 
   async function handlePhotos(e: React.ChangeEvent<HTMLInputElement>) {
+    const maxPhotos = plan?.maxPhotosPerLog ?? 3;
     const files = Array.from(e.target.files ?? []);
-    if (pendingPhotos.length + files.length > 5) { alert("Maximum 5 photos par note"); return; }
+    if (pendingPhotos.length + files.length > maxPhotos) {
+      alert(`Maximum ${maxPhotos} photos par note (votre abonnement).`);
+      return;
+    }
     const base64List = await Promise.all(files.map(readFileAsBase64));
     const newPhotos: Photo[] = base64List.map(base64 => ({ id: crypto.randomUUID(), base64 }));
     setPendingPhotos(prev => [...prev, ...newPhotos]);
@@ -178,6 +343,10 @@ export default function ProjectPage() {
     setActivePanel(activePanel === "edit" ? null : "edit");
   }
 
+  const canUseVoiceNotes = plan?.voiceNotes ?? false;
+  const canUseAI = plan?.aiSummary ?? false;
+  const maxPhotos = plan?.maxPhotosPerLog ?? 3;
+
   const inputClass = "w-full bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2.5 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-orange-500/50 focus:bg-white/[0.06] transition-all";
 
   return (
@@ -191,7 +360,7 @@ export default function ProjectPage() {
               onClick={() => router.push("/")}
               className="text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0"
             >
-              ← 
+              ←
             </button>
             <div className="min-w-0">
               <h1 className="font-semibold text-white truncate">{project?.name ?? ""}</h1>
@@ -291,7 +460,7 @@ export default function ProjectPage() {
           <div className="max-w-3xl mx-auto px-5 py-5 space-y-3">
             <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">Équipe du chantier</p>
             {orgMembers.filter(m => m.role === "worker").length === 0 && (
-              <p className="text-xs text-gray-600 py-2">Aucun ouvrier dans lorganisation.</p>
+              <p className="text-xs text-gray-600 py-2">Aucun ouvrier dans l&apos;organisation.</p>
             )}
             <div className="space-y-2">
               {orgMembers.filter(m => m.role === "worker").map(member => {
@@ -377,10 +546,70 @@ export default function ProjectPage() {
             className={`resize-none ${inputClass}`}
           />
 
+          {/* ── Note vocale ── */}
+          {canUseVoiceNotes ? (
+            <div className="space-y-2 border-t border-white/5 pt-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-600">Note vocale</p>
+                {voiceTranscript && (
+                  <button onClick={clearVoiceNote} className="text-xs text-red-400 hover:text-red-300">
+                    Effacer
+                  </button>
+                )}
+              </div>
+
+              {!isRecording ? (
+                <button
+                  onClick={startRecording}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/[0.04] hover:bg-white/[0.07] border border-white/10 rounded-lg text-sm text-gray-300 transition-all"
+                >
+                  <span className="text-base">🎙</span>
+                  {voiceTranscript ? "Réenregistrer" : "Commencer l'enregistrement"}
+                </button>
+              ) : (
+                <button
+                  onClick={stopRecording}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg text-sm text-red-400 transition-all animate-pulse"
+                >
+                  <span className="w-2 h-2 rounded-full bg-red-400" />
+                  Arrêter l&apos;enregistrement
+                </button>
+              )}
+
+              {recordingError && (
+                <p className="text-xs text-red-400">{recordingError}</p>
+              )}
+
+              {isRecording && (
+                <p className="text-xs text-gray-500 italic">
+                  Transcription en cours...{voiceTranscript && ` "${voiceTranscript.slice(0, 80)}..."`}
+                </p>
+              )}
+
+              {voiceTranscript && !isRecording && (
+                <div className="bg-white/[0.03] border border-white/5 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">Transcription :</p>
+                  <p className="text-sm text-gray-300 leading-relaxed">{voiceTranscript}</p>
+                </div>
+              )}
+
+              {audioUrl && !isRecording && (
+                <audio controls src={audioUrl} className="w-full h-8 opacity-70" />
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-lg px-4 py-3">
+              <span className="text-base">🎙</span>
+              <div>
+                <p className="text-xs text-gray-500">Notes vocales disponibles à partir du plan <span className="text-orange-400">Starter</span></p>
+              </div>
+            </div>
+          )}
+
           {/* Photos */}
-          <div className="space-y-2">
+          <div className="space-y-2 border-t border-white/5 pt-4">
             <div className="flex items-center justify-between">
-              <label className="text-xs text-gray-600">Photos ({pendingPhotos.length}/5)</label>
+              <label className="text-xs text-gray-600">Photos ({pendingPhotos.length}/{maxPhotos})</label>
             </div>
             <input
               type="file" accept="image/*" multiple onChange={handlePhotos}
@@ -437,7 +666,8 @@ export default function ProjectPage() {
 
           <button
             onClick={handleSubmit}
-            className="w-full py-2.5 bg-orange-500 hover:bg-orange-400 text-white font-semibold rounded-lg transition-colors text-sm shadow-lg shadow-orange-500/20"
+            disabled={!content.trim() && !voiceTranscript.trim()}
+            className="w-full py-2.5 bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-white font-semibold rounded-lg transition-colors text-sm shadow-lg shadow-orange-500/20"
           >
             Ajouter la note
           </button>
@@ -458,7 +688,7 @@ export default function ProjectPage() {
 
           {/* Timeline */}
           <div className="relative space-y-3">
-            {[...logs].reverse().map((log, i) => (
+            {[...logs].reverse().map((log) => (
               <div key={log.id} className="group relative bg-white/[0.03] hover:bg-white/[0.05] border border-white/5 rounded-2xl p-5 transition-all space-y-3">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -503,6 +733,38 @@ export default function ProjectPage() {
                   </div>
                 ) : (
                   <p className="text-sm text-gray-200 leading-relaxed">{log.content}</p>
+                )}
+
+                {/* Note vocale du log */}
+                {log.voiceNoteTranscript && (
+                  <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-gray-500 flex items-center gap-1.5">
+                        <span>🎙</span> Note vocale
+                      </p>
+                      {canUseAI && !log.voiceNoteSummary && (
+                        <button
+                          onClick={() => handleSummarize(log)}
+                          disabled={summarizingLogId === log.id}
+                          className="text-xs text-orange-400 hover:text-orange-300 disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {summarizingLogId === log.id ? (
+                            <span className="w-3 h-3 border border-orange-400 border-t-transparent rounded-full animate-spin" />
+                          ) : "✨"} Résumé IA
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400 leading-relaxed">{log.voiceNoteTranscript}</p>
+                    {log.voiceNoteUrl && (
+                      <audio controls src={log.voiceNoteUrl} className="w-full h-8 opacity-60" />
+                    )}
+                    {log.voiceNoteSummary && (
+                      <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-3">
+                        <p className="text-xs text-orange-400 mb-1">✨ Résumé IA</p>
+                        <p className="text-xs text-gray-300 leading-relaxed">{log.voiceNoteSummary}</p>
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {Object.keys(log.customFields).length > 0 && (

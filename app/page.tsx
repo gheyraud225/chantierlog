@@ -167,10 +167,10 @@ export default function Home() {
                   }
                 }}
                 title={projectLimitReached ? `Limite de ${projectLimit} projets atteinte` : undefined}
-                className={`h-8 px-3 text-white text-xs font-semibold rounded-lg transition-all duration-150 shadow-lg ${
+                className={`h-9 px-4 text-white text-xs font-semibold rounded-lg transition-all duration-150 shadow-lg focus:outline-none focus:ring-2 focus:ring-orange-500/50 ${
                   projectLimitReached
                     ? "bg-gray-600 hover:bg-gray-500 shadow-none cursor-pointer"
-                    : "bg-orange-500 hover:bg-orange-400 shadow-orange-500/20"
+                    : "bg-orange-500 hover:bg-orange-400 active:bg-orange-600 shadow-orange-500/20"
                 }`}
               >
                 {projectLimitReached ? "Limite atteinte" : "+ Nouveau chantier"}
@@ -181,7 +181,7 @@ export default function Home() {
             <div className="relative">
               <button
                 onClick={() => setShowNav(!showNav)}
-                className="h-8 w-8 rounded-lg border border-white/10 hover:border-white/20 flex items-center justify-center text-gray-400 hover:text-gray-200 transition-colors"
+                className="h-9 w-9 rounded-lg border border-white/10 hover:border-white/20 flex items-center justify-center text-gray-400 hover:text-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500/40"
               >
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                   <circle cx="2" cy="7" r="1.5" fill="currentColor"/>
@@ -264,26 +264,26 @@ export default function Home() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Nom du chantier"
-                className="col-span-2 sm:col-span-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-orange-500/50 focus:bg-white/[0.07] transition-all"
+                className="col-span-2 sm:col-span-1 bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/30 focus:bg-white/[0.07] transition-all"
               />
               <input
                 value={clientName}
                 onChange={(e) => setClientName(e.target.value)}
                 placeholder="Nom du client"
                 onKeyDown={(e) => e.key === "Enter" && handleAddProject()}
-                className="col-span-2 sm:col-span-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-orange-500/50 focus:bg-white/[0.07] transition-all"
+                className="col-span-2 sm:col-span-1 bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/30 focus:bg-white/[0.07] transition-all"
               />
             </div>
             <div className="flex gap-2">
               <button
                 onClick={handleAddProject}
-                className="px-4 py-2 bg-orange-500 hover:bg-orange-400 text-white text-sm font-semibold rounded-lg transition-colors shadow-lg shadow-orange-500/20"
+                className="px-5 py-2.5 bg-orange-500 hover:bg-orange-400 active:bg-orange-600 text-white text-sm font-semibold rounded-lg transition-all shadow-lg shadow-orange-500/20 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
               >
-                Créer
+                Créer le chantier
               </button>
               <button
                 onClick={() => setShowForm(false)}
-                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-400 text-sm font-semibold rounded-lg transition-colors"
+                className="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-gray-400 text-sm font-semibold rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-white/20"
               >
                 Annuler
               </button>
@@ -296,7 +296,7 @@ export default function Home() {
 
         {/* Stats rapides */}
         {!loading && projects.length > 0 && (
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { label: "Total",    value: counts.all,    color: "text-white"       },
               { label: "En cours", value: counts.active,  color: "text-emerald-400" },
@@ -333,7 +333,7 @@ export default function Home() {
               <button
                 key={s}
                 onClick={() => setFilter(s)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
+                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-orange-500/40 ${
                   filter === s
                     ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20"
                     : "text-gray-500 hover:text-gray-300"

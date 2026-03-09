@@ -101,6 +101,7 @@ export default function ProjectPage() {
   // Notes vocales
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isAutoSummarizing, setIsAutoSummarizing] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -173,17 +174,45 @@ export default function ProjectPage() {
 
       // Transcrire via Whisper (serveur)
       setIsTranscribing(true);
+      let transcript = "";
       try {
+        const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
         const form = new FormData();
-        form.append("audio", blob, `recording.${mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm"}`);
+        form.append("audio", blob, `recording.${ext}`);
         const res = await fetch("/api/ai/transcribe", { method: "POST", body: form });
         const data = await res.json();
-        if (data.transcript) setVoiceTranscript(data.transcript);
-        else if (data.error) setRecordingError(data.error);
+        if (data.transcript) {
+          transcript = data.transcript;
+          setVoiceTranscript(transcript);
+        } else if (data.error) {
+          setRecordingError(data.error);
+        }
       } catch {
         setRecordingError("Impossible de contacter le serveur de transcription.");
       } finally {
         setIsTranscribing(false);
+      }
+
+      // Résumé IA automatique → pré-remplit le champ note
+      if (transcript) {
+        if (plan?.aiSummary) {
+          setIsAutoSummarizing(true);
+          try {
+            const res = await fetch("/api/ai/summarize", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ transcript }),
+            });
+            if (res.ok) {
+              const { summary } = await res.json();
+              if (summary) setContent(summary);
+            }
+          } catch { /* silently fallback to transcript */ }
+          finally { setIsAutoSummarizing(false); }
+        } else {
+          // Pas d'IA : pré-remplir avec la transcription brute
+          setContent(transcript);
+        }
       }
     };
     mr.start();
@@ -248,12 +277,14 @@ export default function ProjectPage() {
       const res = await fetch("/api/ai/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript: log.voiceNoteTranscript ?? log.content, logId: log.id }),
+        body: JSON.stringify({ transcript: log.voiceNoteTranscript ?? log.content }),
       });
       if (res.ok) {
         const { summary } = await res.json();
-        await updateLogVoice(log.id, { voiceNoteSummary: summary });
-        setLogs(prev => prev.map(l => l.id === log.id ? { ...l, voiceNoteSummary: summary } : l));
+        if (summary) {
+          await updateLog({ id: log.id, content: summary });
+          setLogs(prev => prev.map(l => l.id === log.id ? { ...l, content: summary } : l));
+        }
       }
     } finally {
       setSummarizingLogId(null);
@@ -592,10 +623,16 @@ export default function ProjectPage() {
                 </p>
               )}
 
-              {voiceTranscript && !isRecording && !isTranscribing && (
+              {isAutoSummarizing && (
+                <p className="text-xs text-orange-400 italic animate-pulse">
+                  Résumé IA en cours... La note sera pré-remplie.
+                </p>
+              )}
+
+              {voiceTranscript && !isRecording && !isTranscribing && !isAutoSummarizing && (
                 <div className="bg-white/[0.03] border border-white/5 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 mb-1">Transcription :</p>
-                  <p className="text-sm text-gray-300 leading-relaxed">{voiceTranscript}</p>
+                  <p className="text-xs text-gray-500 mb-1">Transcription brute :</p>
+                  <p className="text-sm text-gray-400 leading-relaxed">{voiceTranscript}</p>
                 </div>
               )}
 
@@ -763,12 +800,6 @@ export default function ProjectPage() {
                     <p className="text-xs text-gray-400 leading-relaxed">{log.voiceNoteTranscript}</p>
                     {log.voiceNoteUrl && (
                       <audio controls src={log.voiceNoteUrl} className="w-full h-8 opacity-60" />
-                    )}
-                    {log.voiceNoteSummary && (
-                      <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-3">
-                        <p className="text-xs text-orange-400 mb-1">✨ Résumé IA</p>
-                        <p className="text-xs text-gray-300 leading-relaxed">{log.voiceNoteSummary}</p>
-                      </div>
                     )}
                   </div>
                 )}

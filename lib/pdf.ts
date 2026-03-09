@@ -183,13 +183,15 @@ function drawCoverPage(
     });
   }
 
+  infoY += 10;
   doc.setFontSize(10);
   setTextC(doc, GRAY2);
   doc.text(
     `Rapport du ${new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}`,
-    ML, afterTitle + 60
+    ML, infoY
   );
-  doc.text(`${logCount} note${logCount > 1 ? "s" : ""} de chantier`, ML, afterTitle + 69);
+  infoY += 7;
+  doc.text(`${logCount} note${logCount > 1 ? "s" : ""} de chantier`, ML, infoY);
 
   doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
@@ -275,6 +277,29 @@ function drawLog(
   });
 
   y += 4;
+
+  // Note vocale (transcript brut)
+  if (log.voiceNoteTranscript) {
+    y = needsPage(doc, y, 14, accent);
+    setFill(doc, [240, 240, 240]);
+    const transcriptLines = doc.splitTextToSize(log.voiceNoteTranscript, CW - 6) as string[];
+    const boxH = transcriptLines.length * 5 + 10;
+    doc.roundedRect(ML, y, CW, boxH, 2, 2, "F");
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "bold");
+    setTextC(doc, GRAY2);
+    doc.text("Note vocale transcrite :", ML + 3, y + 5);
+    doc.setFont("helvetica", "italic");
+    setTextC(doc, GRAY1);
+    doc.setFontSize(9);
+    let ty = y + 10;
+    transcriptLines.forEach((line) => {
+      ty = needsPage(doc, ty, 6, accent);
+      doc.text(line, ML + 3, ty);
+      ty += 5;
+    });
+    y = ty + 3;
+  }
 
   // Champs custom
   if (settings.showCustomFields && Object.keys(log.customFields).length > 0) {

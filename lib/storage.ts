@@ -1020,3 +1020,72 @@ export async function adminRemovePlatformAdmin(userId: string): Promise<void> {
     .eq("user_id", userId);
   if (error) console.error(error);
 }
+
+export async function adminRenameOrg(orgId: string, name: string): Promise<void> {
+  const isAdmin = await isPlatformAdmin();
+  if (!isAdmin) return;
+  const { error } = await supabase
+    .from("organizations")
+    .update({ name })
+    .eq("id", orgId);
+  if (error) console.error(error);
+}
+
+export type AdminOrgMember = {
+  id: string;
+  userId: string;
+  name: string;
+  role: "owner" | "manager" | "worker";
+  createdAt: string;
+};
+
+export async function adminGetOrgMembers(orgId: string): Promise<AdminOrgMember[]> {
+  const isAdmin = await isPlatformAdmin();
+  if (!isAdmin) return [];
+  const { data, error } = await supabase
+    .from("organization_members")
+    .select("id, user_id, name, role, created_at")
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: true });
+  if (error || !data) return [];
+  return data.map(r => ({
+    id: r.id,
+    userId: r.user_id,
+    name: r.name,
+    role: r.role,
+    createdAt: r.created_at,
+  }));
+}
+
+export async function adminUpdateMemberRole(memberId: string, role: "owner" | "manager" | "worker"): Promise<void> {
+  const isAdmin = await isPlatformAdmin();
+  if (!isAdmin) return;
+  const { error } = await supabase
+    .from("organization_members")
+    .update({ role })
+    .eq("id", memberId);
+  if (error) console.error(error);
+}
+
+export async function adminRemoveMember(memberId: string): Promise<void> {
+  const isAdmin = await isPlatformAdmin();
+  if (!isAdmin) return;
+  const { error } = await supabase
+    .from("organization_members")
+    .delete()
+    .eq("id", memberId);
+  if (error) console.error(error);
+}
+
+export async function adminCreateInviteCode(orgId: string, role: "manager" | "worker"): Promise<string | null> {
+  const isAdmin = await isPlatformAdmin();
+  if (!isAdmin) return null;
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const { error } = await supabase
+    .from("invite_codes")
+    .insert({ organization_id: orgId, code, role, created_by: user.id });
+  if (error) { console.error(error); return null; }
+  return code;
+}

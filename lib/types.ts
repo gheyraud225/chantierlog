@@ -2,10 +2,30 @@ export type Role = "owner" | "manager" | "worker";
 export type ProjectStatus = "active" | "paused" | "done";
 export type FieldType = "text" | "number" | "boolean";
 export type NewProject = Omit<Project, "organizationId" | "createdBy">;
+export type SubscriptionStatus = "trial" | "active" | "expired" | "cancelled";
 
 export type Organization = {
   id: string;
   name: string;
+  createdAt: string;
+  subscriptionPlanId?: string;
+  subscriptionStatus: SubscriptionStatus;
+  subscriptionExpiresAt?: string;
+  trialEndsAt?: string;
+};
+
+export type SubscriptionPlan = {
+  id: string;
+  name: string;
+  label: string;
+  maxProjects: number;       // -1 = illimité
+  maxPhotosPerLog: number;
+  maxMembers: number;        // -1 = illimité
+  aiSummary: boolean;
+  pdfExport: boolean;
+  customFields: boolean;
+  voiceNotes: boolean;
+  priceMonthly: number;
   createdAt: string;
 };
 
@@ -85,7 +105,11 @@ export type DailyLog = {
   date: string;
   photos: Photo[];
   customFields: Record<string, string | number | boolean>;
+  voiceNoteUrl?: string;
+  voiceNoteTranscript?: string;
+  voiceNoteSummary?: string;
 };
+
 export type PdfSettings = {
   id?: string;
   organizationId: string;
@@ -95,4 +119,26 @@ export type PdfSettings = {
   showPhotos: boolean;
   showCustomFields: boolean;
   footerText: string;
+};
+
+// Admin plateforme — vue agrégée
+export type AdminOrgView = {
+  id: string;
+  name: string;
+  createdAt: string;
+  subscriptionStatus: SubscriptionStatus;
+  subscriptionExpiresAt?: string;
+  trialEndsAt?: string;
+  planName: string;
+  planLabel: string;
+  priceMonthly: number;
+  maxProjects: number;
+  maxPhotosPerLog: number;
+  maxMembers: number;
+  aiSummary: boolean;
+  pdfExport: boolean;
+  voiceNotes: boolean;
+  memberCount: number;
+  projectCount: number;
+  ownerName?: string;
 };

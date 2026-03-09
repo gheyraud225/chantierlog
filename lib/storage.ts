@@ -2,6 +2,7 @@ import { supabase } from "./supabase";
 import {
   Organization, OrganizationMember,
   Project, ProjectField, FieldTemplate, FieldType, DailyLog, PdfSettings,
+  SubscriptionPlan, AdminOrgView,
 } from "./types";
 
 // ─── Auth helpers ─────────────────────────────────────────
@@ -69,7 +70,12 @@ export async function createOrganization(name: string, ownerName: string): Promi
     return null;
   }
 
-  return { id: org.id, name: org.name, createdAt: org.created_at };
+  return {
+    id: org.id,
+    name: org.name,
+    createdAt: org.created_at,
+    subscriptionStatus: "trial" as const,
+  };
 }
 
 // ─── Invitation ───────────────────────────────────────────
@@ -392,6 +398,9 @@ export async function getLogs(projectId: string): Promise<DailyLog[]> {
     date: row.date,
     photos: row.photos ?? [],
     customFields: row.custom_fields ?? {},
+    voiceNoteUrl: row.voice_note_url ?? undefined,
+    voiceNoteTranscript: row.voice_note_transcript ?? undefined,
+    voiceNoteSummary: row.voice_note_summary ?? undefined,
   }));
 }
 
@@ -405,7 +414,22 @@ export async function addLog(log: DailyLog): Promise<void> {
     date: log.date,
     photos: log.photos,
     custom_fields: log.customFields,
+    voice_note_url: log.voiceNoteUrl ?? null,
+    voice_note_transcript: log.voiceNoteTranscript ?? null,
+    voice_note_summary: log.voiceNoteSummary ?? null,
   });
+  if (error) console.error(error);
+}
+
+export async function updateLogVoice(
+  logId: string,
+  fields: { voiceNoteUrl?: string; voiceNoteTranscript?: string; voiceNoteSummary?: string }
+): Promise<void> {
+  const update: Record<string, string | null> = {};
+  if (fields.voiceNoteUrl !== undefined)      update.voice_note_url = fields.voiceNoteUrl;
+  if (fields.voiceNoteTranscript !== undefined) update.voice_note_transcript = fields.voiceNoteTranscript;
+  if (fields.voiceNoteSummary !== undefined)  update.voice_note_summary = fields.voiceNoteSummary;
+  const { error } = await supabase.from("daily_logs").update(update).eq("id", logId);
   if (error) console.error(error);
 }
 
@@ -733,7 +757,15 @@ export async function getOrganization(): Promise<Organization | null> {
     .eq("id", member.organizationId)
     .single();
   if (error || !data) return null;
-  return { id: data.id, name: data.name, createdAt: data.created_at };
+  return {
+    id: data.id,
+    name: data.name,
+    createdAt: data.created_at,
+    subscriptionPlanId: data.subscription_plan_id ?? undefined,
+    subscriptionStatus: data.subscription_status ?? "trial",
+    subscriptionExpiresAt: data.subscription_expires_at ?? undefined,
+    trialEndsAt: data.trial_ends_at ?? undefined,
+  };
 }
 
 // ─── Stats personnelles (worker) ──────────────────────────
@@ -854,4 +886,137 @@ export async function getPersonalStats(): Promise<PersonalStatsData | null> {
     lastLogDate: logsData[0]?.date ?? null,
     logsByProject,
   };
+}
+
+// ─── Abonnements ──────────────────────────────────────────
+
+export async function getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
+  const { data, error } = await supabase
+    .from("subscription_plans")
+    .select("*")
+    .order("price_monthly");
+  if (error || !data) return [];
+  return data.map(row => ({
+    id: row.id,
+    name: row.name,
+    label: row.label,
+    maxProjects: row.max_projects,
+    maxPhotosPerLog: row.max_photos_per_log,
+    maxMembers: row.max_members,
+    aiSummary: row.ai_summary,
+    pdfExport: row.pdf_export,
+    customFields: row.custom_fields,
+    voiceNotes: row.voice_notes,
+    priceMonthly: Number(row.price_monthly),
+    createdAt: row.created_at,
+  }));
+}
+
+export async function getOrgSubscriptionPlan(): Promise<SubscriptionPlan | null> {
+  const member = await getCurrentMember();
+  if (!member) return null;
+  const { data, error } = await supabase
+    .from("organizations")
+    .select("subscription_plan_id, subscription_plans(*)")
+    .eq("id", member.organizationId)
+    .single();
+  if (error || !data) return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const row = (data as any).subscription_plans;
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    label: row.label,
+    maxProjects: row.max_projects,
+    maxPhotosPerLog: row.max_photos_per_log,
+    maxMembers: row.max_members,
+    aiSummary: row.ai_summary,
+    pdfExport: row.pdf_export,
+    customFields: row.custom_fields,
+    voiceNotes: row.voice_notes,
+    priceMonthly: Number(row.price_monthly),
+    createdAt: row.created_at,
+  };
+}
+
+// ─── Admin plateforme ─────────────────────────────────────
+
+export async function isPlatformAdmin(): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user) return false;
+  const { data } = await supabase
+    .from("platform_admins")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .single();
+  return !!data;
+}
+
+export async function getAdminOrganizations(): Promise<AdminOrgView[]> {
+  const isAdmin = await isPlatformAdmin();
+  if (!isAdmin) return [];
+  const { data, error } = await supabase
+    .from("admin_organizations_view")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return data.map(row => ({
+    id: row.id,
+    name: row.name,
+    createdAt: row.created_at,
+    subscriptionStatus: row.subscription_status,
+    subscriptionExpiresAt: row.subscription_expires_at ?? undefined,
+    trialEndsAt: row.trial_ends_at ?? undefined,
+    planName: row.plan_name ?? "free",
+    planLabel: row.plan_label ?? "Gratuit",
+    priceMonthly: Number(row.price_monthly ?? 0),
+    maxProjects: row.max_projects ?? 3,
+    maxPhotosPerLog: row.max_photos_per_log ?? 3,
+    maxMembers: row.max_members ?? 5,
+    aiSummary: row.ai_summary ?? false,
+    pdfExport: row.pdf_export ?? false,
+    voiceNotes: row.voice_notes ?? false,
+    memberCount: row.member_count ?? 0,
+    projectCount: row.project_count ?? 0,
+    ownerName: row.owner_name ?? undefined,
+  }));
+}
+
+export async function adminUpdateOrgSubscription(
+  orgId: string,
+  planId: string,
+  status: "trial" | "active" | "expired" | "cancelled",
+  expiresAt?: string
+): Promise<void> {
+  const isAdmin = await isPlatformAdmin();
+  if (!isAdmin) return;
+  const { error } = await supabase
+    .from("organizations")
+    .update({
+      subscription_plan_id: planId,
+      subscription_status: status,
+      subscription_expires_at: expiresAt ?? null,
+    })
+    .eq("id", orgId);
+  if (error) console.error(error);
+}
+
+export async function adminAddPlatformAdmin(userId: string): Promise<void> {
+  const isAdmin = await isPlatformAdmin();
+  if (!isAdmin) return;
+  const { error } = await supabase
+    .from("platform_admins")
+    .insert({ user_id: userId });
+  if (error) console.error(error);
+}
+
+export async function adminRemovePlatformAdmin(userId: string): Promise<void> {
+  const isAdmin = await isPlatformAdmin();
+  if (!isAdmin) return;
+  const { error } = await supabase
+    .from("platform_admins")
+    .delete()
+    .eq("user_id", userId);
+  if (error) console.error(error);
 }

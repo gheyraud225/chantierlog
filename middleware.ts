@@ -23,6 +23,11 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
 
+  // Routes publiques (OAuth callback)
+  if (path.startsWith("/auth/callback")) {
+    return response;
+  }
+
   // Pas connecté → /login
   if (!user && !path.startsWith("/login")) {
     return NextResponse.redirect(new URL("/login", request.url));
@@ -33,8 +38,22 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  // Connecté + pas sur /onboarding → vérifier si membre d'une org
-  if (user && !path.startsWith("/onboarding")) {
+  // Protection de la route /admin — vérifier platform_admins
+  if (user && path.startsWith("/admin")) {
+    const { data: adminData } = await supabase
+      .from("platform_admins")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .single();
+
+    if (!adminData) {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
+    return response;
+  }
+
+  // Connecté + pas sur /onboarding ni /subscription → vérifier si membre d'une org
+  if (user && !path.startsWith("/onboarding") && !path.startsWith("/subscription")) {
     const { data } = await supabase
       .from("organization_members")
       .select("id")
@@ -63,5 +82,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/).*)"],
 };

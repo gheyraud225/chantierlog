@@ -1,5 +1,45 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {};
+const securityHeaders = [
+  { key: "X-DNS-Prefetch-Control",      value: "on" },
+  { key: "Strict-Transport-Security",   value: "max-age=63072000; includeSubDomains; preload" },
+  { key: "X-Frame-Options",             value: "SAMEORIGIN" },
+  { key: "X-Content-Type-Options",      value: "nosniff" },
+  { key: "Referrer-Policy",             value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy",          value: "camera=(), geolocation=(), microphone=(self)" },
+  {
+    key: "Content-Security-Policy",
+    value: [
+      "default-src 'self'",
+      // Supabase API + Auth
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+      // Scripts Next.js (inline chunks) + Google OAuth popup
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com",
+      // Styles Tailwind inline
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      // Fonts Google
+      "font-src 'self' https://fonts.gstatic.com",
+      // Images : data: pour les photos base64 stockées, blob: pour l'audio
+      "img-src 'self' data: blob: https://*.supabase.co",
+      // Audio blob pour la lecture des notes vocales
+      "media-src 'self' blob: https://*.supabase.co",
+      // OAuth redirects Apple + Google
+      "frame-src https://appleid.apple.com https://accounts.google.com",
+      "form-action 'self'",
+      "base-uri 'self'",
+    ].join("; "),
+  },
+];
+
+const nextConfig: NextConfig = {
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: securityHeaders,
+      },
+    ];
+  },
+};
 
 export default nextConfig;

@@ -35,6 +35,10 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Declare empty turbopack config so Next.js doesn't warn about
+  // webpack-only plugins (e.g. @ducanh2912/next-pwa) when Turbopack
+  // is detected. Production builds use --webpack explicitly.
+  turbopack: {},
   async headers() {
     return [
       {

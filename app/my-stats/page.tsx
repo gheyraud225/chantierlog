@@ -79,6 +79,42 @@ export default function MyStatsPage() {
             )}
           </div>
 
+          {/* ── Utilisation de l'IA ── */}
+          {stats.logsWithAI > 0 && (
+            <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">
+                  Utilisation de l&apos;IA
+                </p>
+                <span className="text-xs font-semibold text-orange-400">
+                  {stats.totalLogs > 0 ? Math.round((stats.logsWithAI / stats.totalLogs) * 100) : 0}% de mes notes
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <p className="text-2xl font-bold text-orange-400">{stats.logsWithAI}</p>
+                  <p className="text-xs text-gray-600 mt-1">Assistées IA</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-violet-400">{stats.logsWithVoice}</p>
+                  <p className="text-xs text-gray-600 mt-1">Vocales</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-sky-400">{stats.logsWithAITitle}</p>
+                  <p className="text-xs text-gray-600 mt-1">Titres IA</p>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-orange-500/70 rounded-full transition-all duration-700"
+                    style={{ width: `${stats.totalLogs > 0 ? (stats.logsWithAI / stats.totalLogs) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Activité 30 jours */}
           <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-6 space-y-4">
             <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">

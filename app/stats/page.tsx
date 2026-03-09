@@ -312,6 +312,73 @@ export default function StatsPage() {
               </div>
             </div>
 
+          {/* ── Utilisation de l'IA ── */}
+          {stats.aiStats.logsWithAI > 0 && (
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+                  Utilisation de l&apos;IA
+                </h2>
+                <span className="text-xs font-semibold text-orange-400 bg-orange-500/10 border border-orange-500/20 rounded-full px-2.5 py-1">
+                  {stats.aiStats.aiUsageRate}% des notes
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <p className="text-2xl font-bold text-orange-400">{stats.aiStats.logsWithAI}</p>
+                  <p className="text-xs text-gray-500 mt-1">Notes assistées IA</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-violet-400">{stats.aiStats.logsWithVoice}</p>
+                  <p className="text-xs text-gray-500 mt-1">Transcriptions vocales</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-sky-400">{stats.aiStats.logsWithAITitle}</p>
+                  <p className="text-xs text-gray-500 mt-1">Titres générés</p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs text-gray-600">
+                  <span>Taux d&apos;adoption</span>
+                  <span>{stats.aiStats.logsWithAI} / {stats.totalLogs} notes</span>
+                </div>
+                <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-orange-500 rounded-full transition-all duration-700"
+                    style={{ width: `${stats.aiStats.aiUsageRate}%` }}
+                  />
+                </div>
+              </div>
+
+              {stats.aiStats.aiByAuthor.length > 0 && (
+                <div className="space-y-2 pt-1 border-t border-gray-800">
+                  <p className="text-xs text-gray-600 pt-1">Par employé</p>
+                  {stats.aiStats.aiByAuthor.map(({ name, count }) => {
+                    const pct = stats.aiStats.logsWithAI > 0
+                      ? Math.round((count / stats.aiStats.logsWithAI) * 100)
+                      : 0;
+                    return (
+                      <div key={name} className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-300">{name}</span>
+                          <span className="text-gray-500">{count} note{count > 1 ? "s" : ""}</span>
+                        </div>
+                        <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-violet-500/60 rounded-full"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           </div>
         </div>
       )}

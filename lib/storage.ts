@@ -508,6 +508,13 @@ export type StatsData = {
   projectsByCommune: { commune: string; count: number }[];
   activityByDay: { date: string; count: number; label: string }[];
   mostActiveProjects: { name: string; count: number }[];
+  aiStats: {
+    logsWithVoice: number;
+    logsWithAITitle: number;
+    logsWithAI: number;
+    aiUsageRate: number;
+    aiByAuthor: { name: string; count: number }[];
+  };
 };
 
 export async function getStats(period: StatsPeriod = "month"): Promise<StatsData | null> {
@@ -530,11 +537,12 @@ export async function getStats(period: StatsPeriod = "month"): Promise<StatsData
     projectsByCommune: [],
     activityByDay: [],
     mostActiveProjects: [],
+    aiStats: { logsWithVoice: 0, logsWithAITitle: 0, logsWithAI: 0, aiUsageRate: 0, aiByAuthor: [] },
   };
 
   const { data: logsData } = await supabase
     .from("daily_logs")
-    .select("id, author_name, project_id, date")
+    .select("id, author_name, project_id, date, voice_note_transcript, title")
     .in("project_id", projectIds);
 
   const { data: membersData } = await supabase
@@ -637,15 +645,34 @@ if (period === "year") {
     .sort((a, b) => b.count - a.count)
     .slice(0, 5);
 
+  // Stats IA
+  const logsWithVoice = (logsData ?? []).filter(l => l.voice_note_transcript).length;
+  const logsWithAITitle = (logsData ?? []).filter(l => l.title).length;
+  const logsWithAI = (logsData ?? []).filter(l => l.voice_note_transcript || l.title).length;
+  const totalLogsCount = logsData?.length ?? 0;
+  const aiUsageRate = totalLogsCount > 0 ? Math.round((logsWithAI / totalLogsCount) * 100) : 0;
+  const aiAuthorMap: Record<string, number> = {};
+  (logsData ?? []).forEach(log => {
+    if (log.voice_note_transcript || log.title) {
+      const name = log.author_name || "Inconnu";
+      aiAuthorMap[name] = (aiAuthorMap[name] ?? 0) + 1;
+    }
+  });
+  const aiByAuthor = Object.entries(aiAuthorMap)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+
   return {
     totalProjects: projectsData?.length ?? 0,
     projectsByStatus,
-    totalLogs: logsData?.length ?? 0,
+    totalLogs: totalLogsCount,
     totalMembers: membersData?.length ?? 0,
     logsByAuthor,
     projectsByCommune,
     activityByDay,
     mostActiveProjects,
+    aiStats: { logsWithVoice, logsWithAITitle, logsWithAI, aiUsageRate, aiByAuthor },
   };
 }
 
@@ -784,6 +811,9 @@ export type PersonalStatsData = {
   activityByDay: { date: string; count: number; label: string }[];
   lastLogDate: string | null;
   logsByProject: { name: string; count: number }[];
+  logsWithVoice: number;
+  logsWithAITitle: number;
+  logsWithAI: number;
 };
 
 export async function getPersonalStats(): Promise<PersonalStatsData | null> {
@@ -796,7 +826,7 @@ export async function getPersonalStats(): Promise<PersonalStatsData | null> {
   // Tous les logs de cet utilisateur
   const { data: logsData } = await supabase
     .from("daily_logs")
-    .select("id, project_id, date, photos, author_name")
+    .select("id, project_id, date, photos, author_name, voice_note_transcript, title")
     .eq("author_id", user.id)
     .order("date", { ascending: false });
 
@@ -809,6 +839,9 @@ export async function getPersonalStats(): Promise<PersonalStatsData | null> {
     activityByDay: [],
     lastLogDate: null,
     logsByProject: [],
+    logsWithVoice: 0,
+    logsWithAITitle: 0,
+    logsWithAI: 0,
   };
 
   // Total photos
@@ -881,6 +914,10 @@ export async function getPersonalStats(): Promise<PersonalStatsData | null> {
     };
   });
 
+  const logsWithVoice = logsData.filter(l => l.voice_note_transcript).length;
+  const logsWithAITitle = logsData.filter(l => l.title).length;
+  const logsWithAI = logsData.filter(l => l.voice_note_transcript || l.title).length;
+
   return {
     totalLogs: logsData.length,
     totalPhotos,
@@ -890,6 +927,9 @@ export async function getPersonalStats(): Promise<PersonalStatsData | null> {
     activityByDay,
     lastLogDate: logsData[0]?.date ?? null,
     logsByProject,
+    logsWithVoice,
+    logsWithAITitle,
+    logsWithAI,
   };
 }
 

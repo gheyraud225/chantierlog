@@ -43,6 +43,98 @@ function needsPage(doc: jsPDF, y: number, needed: number, accent: [number, numbe
   return y;
 }
 
+// ─── Markdown renderer ───────────────────────────────────
+
+function parseSegments(text: string): Array<{ text: string; bold: boolean }> {
+  const segs: Array<{ text: string; bold: boolean }> = [];
+  text.split(/(\*\*[^*]+\*\*)/).forEach((part, i) => {
+    if (!part) return;
+    if (i % 2 === 1) segs.push({ text: part.slice(2, -2), bold: true });
+    else segs.push({ text: part, bold: false });
+  });
+  return segs.filter(s => s.text.length > 0);
+}
+
+function renderInlineSegments(
+  doc: jsPDF,
+  segs: Array<{ text: string; bold: boolean }>,
+  startX: number,
+  y: number,
+  maxW: number,
+  fontSize: number,
+  accent: [number, number, number]
+): number {
+  doc.setFontSize(fontSize);
+  if (segs.length === 1) {
+    doc.setFont("helvetica", segs[0].bold ? "bold" : "normal");
+    setTextC(doc, DARK);
+    const wrapped = doc.splitTextToSize(segs[0].text, maxW) as string[];
+    wrapped.forEach((line, i) => {
+      if (i > 0) { y = needsPage(doc, y, fontSize + 3, accent); }
+      doc.text(line, startX, y);
+      if (i < wrapped.length - 1) y += fontSize * 0.62;
+    });
+    y += fontSize * 0.62;
+    return y;
+  }
+  // Mixed bold/normal: word-level tracking
+  let cx = startX;
+  for (const seg of segs) {
+    doc.setFont("helvetica", seg.bold ? "bold" : "normal");
+    setTextC(doc, DARK);
+    const words = seg.text.split(/(\s+)/);
+    for (const word of words) {
+      const ww = doc.getTextWidth(word);
+      if (word.trim() === "") { cx += ww; continue; }
+      if (cx + ww > startX + maxW + 0.5 && cx > startX) {
+        y = needsPage(doc, y, fontSize + 3, accent);
+        y += fontSize * 0.62;
+        cx = startX;
+      }
+      doc.text(word, cx, y);
+      cx += ww;
+    }
+  }
+  y += fontSize * 0.62;
+  return y;
+}
+
+/** Rendu Markdown minimal : **bold**, listes - item */
+function drawMarkdown(
+  doc: jsPDF,
+  text: string,
+  x: number,
+  startY: number,
+  maxW: number,
+  accent: [number, number, number],
+  fontSize = 10.5
+): number {
+  let y = startY;
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) { y += 3; continue; }
+
+    const bulletMatch = /^[-*•]\s+(.+)$/.exec(line);
+    if (bulletMatch) {
+      y = needsPage(doc, y, fontSize + 4, accent);
+      doc.setFontSize(fontSize);
+      doc.setFont("helvetica", "bold");
+      setTextC(doc, accent);
+      doc.text("•", x + 1.5, y);
+      const segs = parseSegments(bulletMatch[1]);
+      y = renderInlineSegments(doc, segs, x + 7, y, maxW - 7, fontSize, accent);
+      y += 1;
+      continue;
+    }
+
+    y = needsPage(doc, y, fontSize + 4, accent);
+    const segs = parseSegments(line);
+    y = renderInlineSegments(doc, segs, x, y, maxW, fontSize, accent);
+    y += 1;
+  }
+  return y;
+}
+
 // ─── Running header ───────────────────────────────────────
 
 function drawRunningHeader(doc: jsPDF, accent: [number, number, number]) {
@@ -265,18 +357,8 @@ function drawLog(
 
   y += 10;
 
-  // Contenu texte (résumé note)
-  doc.setFontSize(10.5);
-  doc.setFont("helvetica", "normal");
-  setTextC(doc, DARK);
-  const lines = doc.splitTextToSize(log.content, CW) as string[];
-  lines.forEach((line) => {
-    y = needsPage(doc, y, 7, accent);
-    // Lignes vides → espacement réduit pour la lisibilité des paragraphes
-    if (line.trim() === "") { y += 2; return; }
-    doc.text(line, ML, y);
-    y += 6.5;
-  });
+  // Contenu texte — rendu Markdown (gras, bullets)
+  y = drawMarkdown(doc, log.content, ML, y, CW, accent, 10.5);
 
   y += 4;
 

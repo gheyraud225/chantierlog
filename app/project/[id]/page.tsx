@@ -103,8 +103,6 @@ export default function ProjectPage() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isAutoSummarizing, setIsAutoSummarizing] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState("");
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [recordingError, setRecordingError] = useState("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -134,21 +132,9 @@ export default function ProjectPage() {
     });
   }, [id]);
 
-  // Nettoyage de l'URL audio lors du démontage
-  useEffect(() => {
-    return () => {
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-    };
-  }, [audioUrl]);
-
   async function startRecording() {
     setRecordingError("");
     setVoiceTranscript("");
-    setAudioBlob(null);
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl);
-      setAudioUrl(null);
-    }
     audioChunksRef.current = [];
 
     let stream: MediaStream;
@@ -169,8 +155,6 @@ export default function ProjectPage() {
     mr.onstop = async () => {
       stream.getTracks().forEach(t => t.stop());
       const blob = new Blob(audioChunksRef.current, { type: mimeType || "audio/webm" });
-      setAudioBlob(blob);
-      setAudioUrl(URL.createObjectURL(blob));
 
       // Transcrire via Whisper (serveur)
       setIsTranscribing(true);
@@ -226,29 +210,12 @@ export default function ProjectPage() {
 
   function clearVoiceNote() {
     setVoiceTranscript("");
-    setAudioBlob(null);
-    if (audioUrl) { URL.revokeObjectURL(audioUrl); setAudioUrl(null); }
     setRecordingError("");
   }
 
   async function handleSubmit() {
     if (!content.trim() && !voiceTranscript.trim()) return;
     const user = await getCurrentUser();
-
-    // Upload audio si présent (Supabase Storage)
-    let uploadedAudioUrl: string | undefined;
-    if (audioBlob) {
-      const filename = `${crypto.randomUUID()}.webm`;
-      const { data: uploadData } = await import("@/lib/supabase").then(m =>
-        m.supabase.storage.from("voice-notes").upload(filename, audioBlob, { contentType: "audio/webm" })
-      );
-      if (uploadData) {
-        const { data: { publicUrl } } = (await import("@/lib/supabase")).supabase.storage
-          .from("voice-notes")
-          .getPublicUrl(filename);
-        uploadedAudioUrl = publicUrl;
-      }
-    }
 
     const newLog: DailyLog = {
       id: crypto.randomUUID(),
@@ -259,7 +226,6 @@ export default function ProjectPage() {
       date: new Date().toISOString(),
       photos: pendingPhotos,
       customFields: customFieldValues,
-      voiceNoteUrl: uploadedAudioUrl,
       voiceNoteTranscript: voiceTranscript || undefined,
     };
     await addLog(newLog);
@@ -636,9 +602,6 @@ export default function ProjectPage() {
                 </div>
               )}
 
-              {audioUrl && !isRecording && (
-                <audio controls src={audioUrl} className="w-full h-8 opacity-70" />
-              )}
             </div>
           ) : (
             <div className="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-lg px-4 py-3">
@@ -785,9 +748,6 @@ export default function ProjectPage() {
                       <span>🎙</span> Transcription vocale
                     </p>
                     <p className="text-xs text-gray-400 leading-relaxed">{log.voiceNoteTranscript}</p>
-                    {log.voiceNoteUrl && (
-                      <audio controls src={log.voiceNoteUrl} className="w-full h-8 opacity-60" />
-                    )}
                   </div>
                 )}
 

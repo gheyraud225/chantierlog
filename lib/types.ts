@@ -101,6 +101,7 @@ export type DailyLog = {
   projectId: string;
   authorId: string;
   authorName: string;
+  title?: string;
   content: string;
   date: string;
   photos: Photo[];

@@ -357,6 +357,16 @@ function drawLog(
 
   y += 10;
 
+  // Titre IA
+  if (log.title) {
+    y = needsPage(doc, y, 10, accent);
+    doc.setFontSize(13);
+    doc.setFont("helvetica", "bold");
+    setTextC(doc, DARK);
+    doc.text(log.title, ML, y);
+    y += 8;
+  }
+
   // Contenu texte — rendu Markdown (gras, bullets)
   y = drawMarkdown(doc, log.content, ML, y, CW, accent, 10.5);
 

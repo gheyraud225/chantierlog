@@ -86,6 +86,8 @@ export default function ProjectPage() {
   const [editStatus, setEditStatus] = useState<ProjectStatus>("active");
   const [editDescription, setEditDescription] = useState("");
   const [content, setContent] = useState("");
+  const [noteTitle, setNoteTitle] = useState("");
+  const [isImproving, setIsImproving] = useState(false);
   const [pendingPhotos, setPendingPhotos] = useState<Photo[]>([]);
   const [currentMember, setCurrentMember] = useState<OrganizationMember | null>(null);
   const [orgMembers, setOrgMembers] = useState<OrganizationMember[]>([]);
@@ -188,8 +190,9 @@ export default function ProjectPage() {
               body: JSON.stringify({ transcript }),
             });
             if (res.ok) {
-              const { summary } = await res.json();
+              const { title, summary } = await res.json();
               if (summary) setContent(summary);
+              if (title) setNoteTitle(title);
             }
           } catch { /* silently fallback to transcript */ }
           finally { setIsAutoSummarizing(false); }
@@ -213,6 +216,25 @@ export default function ProjectPage() {
     setRecordingError("");
   }
 
+  async function handleImprove() {
+    if (!content.trim() || content.length < 20) return;
+    setIsImproving(true);
+    try {
+      const res = await fetch("/api/ai/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript: content, mode: "text" }),
+      });
+      if (res.ok) {
+        const { title, summary } = await res.json();
+        if (summary) setContent(summary);
+        if (title) setNoteTitle(title);
+      }
+    } finally {
+      setIsImproving(false);
+    }
+  }
+
   async function handleSubmit() {
     if (!content.trim() && !voiceTranscript.trim()) return;
     const user = await getCurrentUser();
@@ -222,6 +244,7 @@ export default function ProjectPage() {
       projectId: id,
       authorId: user?.id ?? "",
       authorName: author,
+      title: noteTitle || undefined,
       content: content || voiceTranscript,
       date: new Date().toISOString(),
       photos: pendingPhotos,
@@ -231,6 +254,7 @@ export default function ProjectPage() {
     await addLog(newLog);
     setLogs(prev => [...prev, newLog]);
     setContent("");
+    setNoteTitle("");
     setPendingPhotos([]);
     setCustomFieldValues({});
     clearVoiceNote();
@@ -535,13 +559,35 @@ export default function ProjectPage() {
             placeholder="Votre nom"
             className={inputClass}
           />
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Avancement, problèmes, matériaux..."
-            rows={4}
-            className={`resize-none ${inputClass}`}
+          <input
+            value={noteTitle}
+            onChange={(e) => setNoteTitle(e.target.value)}
+            placeholder="Titre de la note (optionnel — généré automatiquement par l'IA)"
+            className={inputClass}
           />
+          <div className="relative">
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Avancement, problèmes, matériaux..."
+              rows={4}
+              className={`resize-none ${inputClass}`}
+            />
+            {canUseAI && content.length > 20 && !isImproving && !isAutoSummarizing && !isRecording && (
+              <button
+                onClick={handleImprove}
+                className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 text-xs text-orange-400 hover:text-orange-300 bg-black/50 hover:bg-black/70 border border-orange-500/20 rounded-lg transition-all"
+              >
+                ✨ Améliorer avec l&apos;IA
+              </button>
+            )}
+            {isImproving && (
+              <div className="absolute bottom-2 right-2 flex items-center gap-1.5 px-2 py-1 text-xs text-orange-400 bg-black/50 border border-orange-500/20 rounded-lg">
+                <span className="w-3 h-3 border border-orange-400 border-t-transparent rounded-full animate-spin" />
+                Amélioration...
+              </div>
+            )}
+          </div>
 
           {/* ── Note vocale ── */}
           {canUseVoiceNotes ? (
@@ -738,7 +784,12 @@ export default function ProjectPage() {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-200 leading-relaxed">{log.content}</p>
+                  <div className="space-y-1">
+                    {log.title && (
+                      <p className="text-sm font-semibold text-gray-100">{log.title}</p>
+                    )}
+                    <p className="text-sm text-gray-300 leading-relaxed">{log.content}</p>
+                  </div>
                 )}
 
                 {/* Note vocale du log */}
